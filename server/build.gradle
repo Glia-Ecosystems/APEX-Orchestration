@@ -49,6 +49,9 @@ dependencies {
 
     //Swagger
     compile "io.swagger:swagger-jersey-jaxrs:${revSwagger}"
+    compile('javax.xml.bind:jaxb-api:2.3.0')
+    compile('javax.activation:activation:1.1')
+    compile('org.glassfish.jaxb:jaxb-runtime:2.3.0')
 }
 
 shadowJar {
