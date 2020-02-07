@@ -9,7 +9,7 @@ import com.google.inject.multibindings.StringMapKey;
 import com.google.inject.name.Named;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.EventQueueProvider;
-import com.netflix.conductor.core.events.kafka.KafkaEventQueueProvider;
+import com.netflix.conductor.core.events.queue.kafka.KafkaEventQueueProvider;
 
 /**
  * @author preeth
