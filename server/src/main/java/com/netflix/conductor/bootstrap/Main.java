@@ -32,7 +32,7 @@ import java.util.Optional;
 public class Main {
 
     public static void main(String[] args) throws Exception {
-
+        
         BootstrapUtil.loadConfigFile(args.length > 0 ? args[0] : System.getenv("CONDUCTOR_CONFIG_FILE"));
 
         if (args.length == 2) {
