@@ -9,25 +9,23 @@ import com.google.inject.multibindings.StringMapKey;
 import com.google.inject.name.Named;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.EventQueueProvider;
-import com.netflix.conductor.core.events.queue.kafka.KafkaEventQueueProvider;
 
 /**
- * @author preeth
+ * @author Glia Ecosystems
  *
  */
-public class KafkaConsumer extends AbstractModule {
-    private static Logger logger = LoggerFactory.getLogger(KafkaConsumer.class);
+public class KafkaModule extends AbstractModule {
+    private static Logger logger = LoggerFactory.getLogger(KafkaModule.class);
 
     @Override
     protected void configure() {
-        logger.info("Kafka module KafkaConsumer.");
+        logger.info("Kafka module configured.");
     }
 
     @ProvidesIntoMap
     @StringMapKey("kafka")
     @Singleton
     @Named("EventQueueProviders")
-
     public EventQueueProvider getKafkaEventQueueProvider(Configuration configuration) {
         return new KafkaEventQueueProvider(configuration);
     }
