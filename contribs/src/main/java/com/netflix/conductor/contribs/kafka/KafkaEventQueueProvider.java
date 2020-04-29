@@ -33,11 +33,19 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
         }
     }
 
+    /**
+     * Implements getQueue function for providing a KafkaObservableQueue object with given topic
+     * @param queueURI The topic for kafka to subscribe to
+     * @return Initialization of a KafkaObservableQueue object stored in the queue
+     */
     @Override
     public ObservableQueue getQueue(String queueURI) {
         return queues.computeIfAbsent(queueURI, q -> new KafkaObservableQueue(queueURI, config));
     }
 
+    /**
+     * Starts the process for the Kafka Listener to process client requests to Conductor via Kafka
+     */
     public void startKafkaListener(){
         String topic = config.getProperty("kafka.topic", "");
         if (topic.isEmpty()) {
