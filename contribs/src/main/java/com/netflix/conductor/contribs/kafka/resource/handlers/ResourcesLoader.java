@@ -37,7 +37,7 @@ public class ResourcesLoader {
      * @param resourcesPath The relative path to the resource package
      * @param resourceUtilities An object that provides helper functions for managing resources
      */
-    public ResourcesLoader(final String resourcesPath, ResourceUtilities resourceUtilities) {
+    public ResourcesLoader(final String resourcesPath, final ResourceUtilities resourceUtilities) {
         this(resourceUtilities.getContextClassLoader(), resourcesPath, resourceUtilities);
     }
 
@@ -47,7 +47,7 @@ public class ResourcesLoader {
      * @param resourcesPath The relative path to the resource package
      * @param resourceUtilities An object that provides helper functions for managing resources
      */
-    private ResourcesLoader(final ClassLoader classLoader, final String resourcesPath, ResourceUtilities resourceUtilities) {
+    private ResourcesLoader(final ClassLoader classLoader, final String resourcesPath, final ResourceUtilities resourceUtilities) {
         this.resourceUtilities = resourceUtilities;
         this.resourcesPath = resourcesPath;
         this.classes = new LinkedHashSet<Class<?>>();
@@ -116,7 +116,7 @@ public class ResourcesLoader {
      * @param className The name of the class to be loaded
      * @return An instance of the requested class to be loaded
      */
-    private <T> Class<T> loadResourceClass(String className) {
+    private <T> Class<T> loadResourceClass(final String className) {
         try {
             return (Class<T>) Class.forName(className, false, classloader);
         } catch (ClassNotFoundException ex) {
