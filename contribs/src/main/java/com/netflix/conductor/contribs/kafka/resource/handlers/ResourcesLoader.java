@@ -75,7 +75,7 @@ public class ResourcesLoader {
      * Creates a InputStream to be used for reading the given Jar file.
      * @param url URL object of the Jar File to be read
      */
-    public void readJarFile(final URL url) {
+    private void readJarFile(final URL url) {
         // Parses the file absolute path for relevant information
         final String file = url.getFile();
         final String jarFileUrl = file.substring(0, file.lastIndexOf('!'));
