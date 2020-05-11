@@ -16,7 +16,7 @@ public class ResourceMethod {
     private final Annotation[] annotations;
     private final Class returnType;
     private final List<MethodParameter> parameters;
-    public enum Source {ENTITY, QUERY, MATRIX, PATH, COOKIE, HEADER, CONTEXT, FORM, UNKNOWN};
+    public enum ParameterSource {REGULAR, QUERY, PATH};
 
 
     public ResourceMethod(Method method, Path uri, String httpMethod, Annotation[] annotations, Class returnType) {
@@ -65,18 +65,16 @@ public class ResourceMethod {
         private final Class<?> parameterClass;
         private final Type parameterType;
         private final Annotation parameterAnnotation;
-        private final Source parameterSource ;
+        private final ParameterSource parameterSource ;
         private final String parameterName;
-        private final String parameterDefault;
 
         public MethodParameter(Class<?> parameterClass, Type parameterType, Annotation parameterAnnotation,
-                               Source parameterSource, String parameterName, String parameterDefault){
+                               ParameterSource parameterSource, String parameterName){
             this.parameterClass = parameterClass;
             this.parameterType = parameterType;
             this.parameterAnnotation = parameterAnnotation;
             this.parameterSource = parameterSource;
             this.parameterName = parameterName;
-            this.parameterDefault = parameterDefault;
         }
     }
 }

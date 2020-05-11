@@ -1,6 +1,7 @@
 package com.netflix.conductor.contribs.kafka.resource.builder;
 
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.MethodParameter;
+import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.ParameterSource;
 
 import javax.ws.rs.*;
 import java.lang.annotation.Annotation;
@@ -75,37 +76,31 @@ public class ResourceBuilder {
         for (int i = 0; i < parameterTypes.length; i++) {
             MethodParameter parameter = resourceMethodParameter(parameterTypes[i],
                     genericParameterTypes[i], parameterAnnotations[i]);
-            if (parameter != null){
-                resourceMethod.getParameters().add(parameter);
-            }
+            resourceMethod.getParameters().add(parameter);
         }
     }
     private static MethodParameter resourceMethodParameter(final Class<?> parameterClass, final Type parameterType ,
                                                            final Annotation[] parameterAnnotations) {
         Annotation parameterAnnotation = null;
-        ResourceMethod.Source parameterSource = null;
+        ParameterSource parameterSource = null;
         String parameterName = null;
-        String parameterDefault = null;
 
         for (Annotation annotation : parameterAnnotations) {
             if (PathParam.class == annotation.annotationType()) {
                 parameterAnnotation = annotation;
-                parameterSource = ResourceMethod.Source.PATH;
+                parameterSource = ParameterSource.PATH;
                 parameterName = ((PathParam) annotation).value();
             } else if (QueryParam.class == annotation.annotationType()) {
                 parameterAnnotation = annotation;
-                parameterSource = ResourceMethod.Source.QUERY;
+                parameterSource = ParameterSource.QUERY;
                 parameterName = ((QueryParam) annotation).value();
-            } else if (DefaultValue.class == annotation.annotationType()) {
-                parameterDefault = ((DefaultValue) annotation).value();
             } else {
-                parameterSource = ResourceMethod.Source.ENTITY;
+                parameterSource = ParameterSource.REGULAR;
             }
         }
         if (parameterAnnotation == null) {
-            parameterSource = ResourceMethod.Source.ENTITY;
+            parameterSource = ParameterSource.REGULAR;
         }
-        return new MethodParameter(parameterClass, parameterType, parameterAnnotation, parameterSource,
-                parameterName, parameterDefault);
+        return new MethodParameter(parameterClass, parameterType, parameterAnnotation, parameterSource, parameterName);
     }
 }

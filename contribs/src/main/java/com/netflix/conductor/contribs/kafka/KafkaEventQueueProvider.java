@@ -58,11 +58,9 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
             logger.error("Configuration missing for Kafka topic.");
             throw new IllegalArgumentException("Configuration missing for Kafka topic.");
         }
-        KafkaObservableQueue kafka = new KafkaObservableQueue(topic, config, injector);
-        kafka.listen();
-        //Thread kafkaListener = new Thread(new KafkaObservableQueue(topic, config, injector));
-        //kafkaListener.setDaemon(true);
-        //kafkaListener.start();
+        Thread kafkaListener = new Thread(new KafkaObservableQueue(topic, config, injector));
+        kafkaListener.setDaemon(true);
+        kafkaListener.start();
         logger.info("Kafka Listener Started.");
     }
 

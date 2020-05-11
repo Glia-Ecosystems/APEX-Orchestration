@@ -367,9 +367,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
      * Kafka
      */
     public void listen() {
-        // Thread.sleep function is executed so that a consumed message is not sent
-        // to Conductor before the server is started
-        //Thread.sleep(60);
+        sleepThread(); // This allows the Kafka thread to run once the server is started
         logger.info("Consuming messages from topic {}. ", queueName);
         readThread.set(Thread.currentThread());
         while (true) {
@@ -380,6 +378,19 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
                 ack(message);
                 publish(response);
             }
+        }
+    }
+
+    /**
+     *
+     */
+    private void sleepThread(){
+        // Thread.sleep function is executed so that a consumed message is not sent
+        // to Conductor before the server is started
+        try {
+            Thread.sleep(120000); // Two minutes thread sleep
+        } catch (InterruptedException e) {
+            logger.error("Error occurred while trying to sleep Thread", e);
         }
     }
 
