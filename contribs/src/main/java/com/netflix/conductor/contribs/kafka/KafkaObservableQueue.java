@@ -382,7 +382,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     }
 
     /**
-     *
+     * Execute a Thread sleep for the established time
      */
     private void sleepThread(){
         // Thread.sleep function is executed so that a consumed message is not sent
