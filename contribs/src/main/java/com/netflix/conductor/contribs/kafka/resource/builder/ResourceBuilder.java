@@ -52,9 +52,8 @@ public class ResourceBuilder {
      */
     private static void resourceFields(final Resource resource) {
         Class<?> resourceClass = resource.getResource();
-        // Gets an array of all the fields declared in the class
-        // Private or Public
-        final Field[] fields = resourceClass.getDeclaredFields();
+        // Gets an array of all the public fields declared in the class
+        final Field[] fields = resourceClass.getFields();
         for (Field field: fields){
             resource.getFields().add(field);
         }
