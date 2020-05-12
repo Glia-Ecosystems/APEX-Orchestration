@@ -50,7 +50,7 @@ public class ResourcesLoader {
     private ResourcesLoader(final ClassLoader classLoader, final String resourcesPath, final ResourceUtilities resourceUtilities) {
         this.resourceUtilities = resourceUtilities;
         this.resourcesPath = resourcesPath;
-        this.classes = new LinkedHashSet<Class<?>>();
+        this.classes = new LinkedHashSet<>();
         this.classloader = classLoader;
         this.annotations = Stream.of("L" + Path.class.getName().replaceAll("\\.", "/") + ";")
                 .collect(Collectors.toCollection(HashSet::new));
@@ -95,7 +95,7 @@ public class ResourcesLoader {
      * the jar files for the necessary resource classes.
      * @param inputStream A BufferedInputStream object for reading chunks of bytes
      * @param parent The parent path of the resource
-     * @throws IOException
+     * @throws IOException Indicator that an input/output exception have occurred
      */
     private void read(final InputStream inputStream, final String parent) throws IOException {
         try (JarInputStream jarInputStream = new JarInputStream(inputStream)) {

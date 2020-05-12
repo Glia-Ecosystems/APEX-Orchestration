@@ -60,13 +60,13 @@ public class KafkaMessageHandler {
      * @param requestMessage Map object of the request message sent to the Conductor API via Kafka
      * @return Indicator of if the message contains all required information.
      */
-    public boolean requestMessageErrors(Map<String, ?> requestMessage){
+    public boolean requestMessageErrors(final Map<String, ?> requestMessage){
         if (requestMessage.get("path") == null) {
-            logger.error("Conductor API request message sent via conductor contain missing/empty URI path", requestMessage);
+            logger.error("Conductor API request message sent via conductor contain missing/empty URI path");
             errorMessage = "Conductor API request message sent via conductor contain missing/empty URI path";
             return true;
         }else if (requestMessage.get("method") == null) {
-            logger.error("Conductor API request message sent via conductor contain missing/empty HTTP method", requestMessage);
+            logger.error("Conductor API request message sent via conductor contain missing/empty HTTP method");
             errorMessage = "Conductor API request message sent via conductor contain missing/empty HTTP method";
             return true;
         }
@@ -78,7 +78,7 @@ public class KafkaMessageHandler {
      * @param payload The client request retrieved from Kafka
      * @return Map object of the client request
      */
-    private <T> Map<String, T> jsonStringToMap(String payload){
+    private <T> Map<String, T> jsonStringToMap(final String payload){
         ObjectMapper mapper = new ObjectMapper();
         Map<String, T> message = null;
         try {
@@ -95,9 +95,9 @@ public class KafkaMessageHandler {
      * @param response Object containing the message to be send back to the client
      * @return Json string message
      */
-    private String toJSONString(Object response){
+    private String toJSONString(final Object response){
         ObjectMapper mapper = new ObjectMapper();
-        String responseMessage = null;
+        String responseMessage;
         try{
             responseMessage = mapper.writeValueAsString(response);
         } catch (JsonProcessingException e) {
