@@ -33,26 +33,26 @@ public class KafkaMessageHandler {
      * @return Message object of the response from Conductor API or any errors that may occur during the process
      */
     public Message processMessage(final Message message){
-        Map<String, ?> request = jsonStringToMap(message.getPayload());
-        if (request == null){
-            ResponseContainer responseContainer = new ResponseContainer();
+        final Map<String, ?> request = jsonStringToMap(message.getPayload());
+        if (request == null) {
+            final ResponseContainer responseContainer = new ResponseContainer();
             responseContainer.setResponseErrorMessage(errorMessage);
             responseContainer.setResponseEntity(message.getPayload());
-            return new Message(message.getId(), toJSONString(responseContainer), "");
+            return new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
         }
         //Verifies client message for Conductor
-        if(requestMessageErrors(request)){
-            ResponseContainer responseContainer = new ResponseContainer();
+        if (requestMessageErrors(request)) {
+            final ResponseContainer responseContainer = new ResponseContainer();
             responseContainer.setResponseErrorMessage(errorMessage);
             responseContainer.setResponseEntity(request);
-            return new Message(message.getId(), toJSONString(responseContainer), "");
+            return new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
         }
         // Get the necessary info from the request message for sending to the Conductor API
-        String path = resourceHandler.verifyRequestedURIPath((String) request.get("path"));
-        String method = resourceHandler.verifyRequestedHTTPMethod((String) request.get("method"));
-        Object entity = request.get("request");
-        ResponseContainer responseContainer = resourceHandler.processRequest(path, method, entity);
-        return new Message(message.getId(), toJSONString(responseContainer), "");
+        final String path = resourceHandler.verifyRequestedURIPath((String) request.get("path"));
+        final String method = resourceHandler.verifyRequestedHTTPMethod((String) request.get("method"));
+        final Object entity = request.get("request");
+        final ResponseContainer responseContainer = resourceHandler.processRequest(path, method, entity);
+        return new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
     }
 
     /**
@@ -79,11 +79,12 @@ public class KafkaMessageHandler {
      * @return Map object of the client request
      */
     private <T> Map<String, T> jsonStringToMap(final String payload){
-        ObjectMapper mapper = new ObjectMapper();
+        final ObjectMapper mapper = new ObjectMapper();
         Map<String, T> message = null;
         try {
-            message = mapper.readValue(payload, new TypeReference<Map<String, T >>() {});
-        } catch (JsonProcessingException e) {
+            message = mapper.readValue(payload, new TypeReference<Map<String, T>>() {
+            });
+        } catch (final JsonProcessingException e) {
             logger.error("Error converting deserialize json to map", e);
             errorMessage = "Error converting deserialize json to map: " + e.toString();
         }
@@ -92,17 +93,19 @@ public class KafkaMessageHandler {
 
     /**
      * Converts an Object to a Json String
+     *
      * @param response Object containing the message to be send back to the client
      * @return Json string message
      */
-    private String toJSONString(final Object response){
-        ObjectMapper mapper = new ObjectMapper();
-        String responseMessage;
-        try{
+    private String toJSONString(final Object response) {
+        final ObjectMapper mapper = new ObjectMapper();
+        final String responseMessage;
+        try {
             responseMessage = mapper.writeValueAsString(response);
-        } catch (JsonProcessingException e) {
-            logger.error("Error converting response message to json", e);
-            responseMessage = "Error converting response message to json: " + e.toString();
+        } catch (final JsonProcessingException e) {
+            // logger.error("Error converting response message to json", e);
+            // responseMessage = "Error converting response message to json: " + e.toString();
+            throw new RuntimeException("Error converting response message to json", e);
         }
         return responseMessage;
     }
