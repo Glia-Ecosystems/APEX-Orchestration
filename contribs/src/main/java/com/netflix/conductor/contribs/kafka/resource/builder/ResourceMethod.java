@@ -148,10 +148,12 @@ public class ResourceMethod {
 
         /**
          * Get the name of the parameter
+         *
          * @return Parameter name
          */
         public String getParameterName() {
             return parameterName;
         }
+
     }
 }

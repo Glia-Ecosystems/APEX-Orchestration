@@ -21,7 +21,7 @@ import static java.lang.Boolean.getBoolean;
 @Singleton
 public class KafkaEventQueueProvider implements EventQueueProvider {
     private static final Logger logger = LoggerFactory.getLogger(KafkaEventQueueProvider.class);
-    protected Map<String, KafkaObservableQueue> queues = new ConcurrentHashMap<>();
+    protected final Map<String, KafkaObservableQueue> queues = new ConcurrentHashMap<>();
     private final Configuration config;
 
     /**
