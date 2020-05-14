@@ -66,9 +66,10 @@ public class ResourceHandler {
 
     /**
      * Main function for processing client requests  to the  Conductor API
-     * @param path URI path of the requested resource
+     *
+     * @param path       URI path of the requested resource
      * @param httpMethod HTTP method to assist in identify the requested service from the resource
-     * @param entity The argument to be sent to the resource service
+     * @param entity     The argument to be sent to the resource service
      * @return Response from resource
      */
     public ResponseContainer processRequest(final String path, final String httpMethod, final Object entity) {
@@ -173,7 +174,7 @@ public class ResourceHandler {
             final Object[] methodArguments = getMethodArguments(request, requestedMethod, requestedResource);
             serviceResponse = callService(resourceInstance, requestedMethod.getMethod(), methodArguments);
         } catch (final Exception ex) {
-            logger.error("Error occurred while executing the request on the resource method. {}", ex.getMessage());
+            logger.error("Error occurred while executing the request on the resource method. Error: {}", ex.getMessage());
             response.setResponseErrorMessage("Error occurred while executing the request on the resource method. " +
                     "Error: " + ex);
         }
@@ -188,11 +189,13 @@ public class ResourceHandler {
      */
     private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response) {
         if ("".equals(responseContainer.responseErrorMessage)) {
-            responseContainer.setStatus(500);
-            responseContainer.setStatusType(Status.INTERNAL_SERVER_ERROR);
-        } else {
+            // If no error message respond that everything went okay with process request
             responseContainer.setStatus(200);
             responseContainer.setStatusType(Status.OK);
+        } else {
+            // If an error occurred, set internal server error status
+            responseContainer.setStatus(500);
+            responseContainer.setStatusType(Status.INTERNAL_SERVER_ERROR);
         }
         responseContainer.setResponseEntity(response);
         return responseContainer;
@@ -305,13 +308,13 @@ public class ResourceHandler {
     /**
      * Container object for the client request
      */
-    private static class RequestContainer{
+    private static class RequestContainer {
 
         private final String resourceURI;
         private final String httpMethod;
         private final Object entity;
 
-        public RequestContainer(final String resourceURI, final String httpMethod, final Object entity){
+        public RequestContainer(final String resourceURI, final String httpMethod, final Object entity) {
             this.resourceURI = resourceURI;
             this.httpMethod = httpMethod;
             this.entity = entity;
