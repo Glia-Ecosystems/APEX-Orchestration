@@ -85,7 +85,7 @@ public class KafkaMessageHandler {
             message = mapper.readValue(payload, new TypeReference<Map<String, T>>() {
             });
         } catch (final JsonProcessingException e) {
-            logger.error("Error converting deserialize json to map", e);
+            logger.error("Error converting deserialize json to map. {}", e.getMessage());
             errorMessage = "Error converting deserialize json to map: " + e.toString();
         }
         return message;

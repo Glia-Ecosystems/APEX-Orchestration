@@ -226,7 +226,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
                 messages.add(message);
             });
         } catch (final KafkaException e) {
-            logger.error("kafka consumer message polling failed.", e);
+            logger.error("kafka consumer message polling failed. {}", e.getMessage());
         }
         return messages;
     }
@@ -405,7 +405,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
             // Restores the interrupt by the InterruptedException so that caller can see that
             // interrupt has occurred.
             Thread.currentThread().interrupt();
-            logger.error("Error occurred while trying to sleep Thread", e);
+            logger.error("Error occurred while trying to sleep Thread. {}", e.getMessage());
         }
     }
 
@@ -433,12 +433,12 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         try {
             listen();
         } catch (final Exception e) {
-            logger.error("KafkaObservableQueue.listen(), exiting due to error!", e);
+            logger.error("KafkaObservableQueue.listen(), exiting due to error! {}", e.getMessage());
         }
         try {
             close();
         } catch (final Exception e) {
-            logger.error("KafkaObservableQueue.close(), unable to complete kafka clean up!", e);
+            logger.error("KafkaObservableQueue.close(), unable to complete kafka clean up! {}", e.getMessage());
         }
     }
 }
