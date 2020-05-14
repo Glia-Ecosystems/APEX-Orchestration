@@ -22,7 +22,6 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.execution.ApplicationException;
-import com.netflix.conductor.core.events.queue.kafka.KafkaObservableQueue;
 
 import rx.Observable;
 

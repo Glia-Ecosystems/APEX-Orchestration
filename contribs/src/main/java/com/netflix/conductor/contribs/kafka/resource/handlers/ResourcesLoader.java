@@ -27,28 +27,26 @@ public class ResourcesLoader {
     private final Set<Class<?>> classes;
     private final ClassLoader classloader;
     private final String resourcesPath;
-    private final ResourceUtilities resourceUtilities;
     private final Set<String> annotations;
     private final AnnotatedClassesVisitor classVisitor;
 
     /**
      * Implements ResourceLoader Constructor chaining by getting the context classloader
      * and passing it with all given arguments to the main initialization constructor
+     *
      * @param resourcesPath The relative path to the resource package
-     * @param resourceUtilities An object that provides helper functions for managing resources
      */
-    public ResourcesLoader(final String resourcesPath, final ResourceUtilities resourceUtilities) {
-        this(resourceUtilities.getContextClassLoader(), resourcesPath, resourceUtilities);
+    public ResourcesLoader(final String resourcesPath) {
+        this(ResourceUtilities.getContextClassLoader(), resourcesPath);
     }
 
     /**
      * Initialization of the ResourceLoader class
-     * @param classLoader A object that is part of the JRE for dynamically loading classes
+     *
+     * @param classLoader   A object that is part of the JRE for dynamically loading classes
      * @param resourcesPath The relative path to the resource package
-     * @param resourceUtilities An object that provides helper functions for managing resources
      */
-    private ResourcesLoader(final ClassLoader classLoader, final String resourcesPath, final ResourceUtilities resourceUtilities) {
-        this.resourceUtilities = resourceUtilities;
+    private ResourcesLoader(final ClassLoader classLoader, final String resourcesPath) {
         this.resourcesPath = resourcesPath;
         this.classes = new LinkedHashSet<>();
         this.classloader = classLoader;
@@ -66,8 +64,8 @@ public class ResourcesLoader {
             while (urls.hasMoreElements()) {
                 readJarFile(urls.nextElement());
             }
-        } catch (IOException ex) {
-            logger.error("Can not locate Resources for Kafka Listener", ex);
+        } catch (final IOException ex) {
+            logger.error("Can not locate Resources for Kafka Listener. {}", ex.getMessage());
         }
     }
 
@@ -82,10 +80,10 @@ public class ResourcesLoader {
         final String resourceParentPath = file.substring(file.lastIndexOf('!') + 2);
         // Implements a try-with resource statement that will automatically close resources upon statement
         // complete or if abrupt as a result of an error
-        try (BufferedInputStream inputStream = new BufferedInputStream(new URL(jarFileUrl).openStream())) {
+        try (final BufferedInputStream inputStream = new BufferedInputStream(new URL(jarFileUrl).openStream())) {
             read(inputStream, resourceParentPath);
-        } catch (IOException ex) {
-            logger.error("Error attempting to scan the JarFile: " + jarFileUrl, ex);
+        } catch (final IOException ex) {
+            logger.error("Error attempting to scan the JarFile {} {}", jarFileUrl, ex.getMessage());
         }
     }
 
@@ -98,7 +96,7 @@ public class ResourcesLoader {
      * @throws IOException Indicator that an input/output exception have occurred
      */
     private void read(final InputStream inputStream, final String parent) throws IOException {
-        try (JarInputStream jarInputStream = new JarInputStream(inputStream)) {
+        try (final JarInputStream jarInputStream = new JarInputStream(inputStream)) {
             JarEntry entry = jarInputStream.getNextJarEntry();
             while (entry != null) {
                 if (!entry.isDirectory() && entry.getName().startsWith(parent) && entry.getName().endsWith(".class")) {
@@ -108,20 +106,6 @@ public class ResourcesLoader {
                 jarInputStream.closeEntry();
                 entry = jarInputStream.getNextJarEntry();
             }
-        }
-    }
-
-    /**
-     * Load an instance of the class specified by the given class name
-     * @param className The name of the class to be loaded
-     * @return An instance of the requested class to be loaded
-     */
-    private <T> Class<T> loadResourceClass(final String className) {
-        try {
-            return (Class<T>) Class.forName(className, false, classloader);
-        } catch (ClassNotFoundException ex) {
-            String error = "The class file " + className + " is identified as an annotated class but could not be found";
-            throw new RuntimeException(error, ex);
         }
     }
 
@@ -156,14 +140,16 @@ public class ResourcesLoader {
 
         /**
          * Provides the functionality to visit the header of the class
-         * @param version The class version
-         * @param access The class access flags
-         * @param name The name of the given class
-         * @param signature The signature of the class if its not a generic class or implements or extends generics
-         * @param superName The name of the given class associated super class, if exist
+         *
+         * @param version    The class version
+         * @param access     The class access flags
+         * @param name       The name of the given class
+         * @param signature  The signature of the class if its not a generic class or implements or extends generics
+         * @param superName  The name of the given class associated super class, if exist
          * @param interfaces The name of the given class associated interface classes, if exist
          */
-        public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+        @Override
+        public void visit(final int version, final int access, final String name, final String signature, final String superName, final String[] interfaces) {
             className = name;
             // ACC_PUBLIC provides the access flag for public classes, fields, and methods
             isScoped = (Opcodes.ACC_PUBLIC & access) != 0;
@@ -174,25 +160,43 @@ public class ResourcesLoader {
          * Visits the annotation, if present, in a Java class and checks if its an annotation of interest,
          * then set isClassAnnotated to True to indicate that the given class is of interest.
          *
-         * @param desc The descriptor of the annotation class
+         * @param desc    The descriptor of the annotation class
          * @param visible Indicator of if the annotation is visible at runtime
          * @return Null
          */
-        public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
-            isClassAnnotated = annotations.contains(desc) | isClassAnnotated;
+        @Override
+        public AnnotationVisitor visitAnnotation(final String desc, final boolean visible) {
+            isClassAnnotated = annotations.contains(desc) || isClassAnnotated;
             return null;
         }
 
         /**
          * The visitEnd method is the last method called in the ClassVisitor process to indicate that
          * all the fields and methods of the given class as been visited.
-         *
+         * <p>
          * This function is extended to load the class into the classes Map if it is a resource class
          * of interest for processing client requests for Conductor
          */
+        @Override
         public void visitEnd() {
             if (isScoped && isClassAnnotated) {
-                classes.add(loadResourceClass(className.replaceAll("/", ".")));
+                classes.add(loadResourceClass(className.replace("/", ".")));
+            }
+        }
+
+        /**
+         * Load an instance of the class specified by the given class name
+         *
+         * @param className The name of the class to be loaded
+         * @return An instance of the requested class to be loaded
+         */
+        private <T> Class<T> loadResourceClass(final String className) {
+            try {
+                return (Class<T>) Class.forName(className, false, classloader);
+            } catch (final ClassNotFoundException ex) {
+                final String error = "The class file " + className + " is identified as an annotated class but could not be found";
+                // Throwing a generic runtime exception
+                throw new RuntimeException(error, ex);
             }
         }
     }

@@ -31,9 +31,8 @@ import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.slf4j.Logger;
+
 import org.slf4j.LoggerFactory;
-
-
 import static java.lang.Boolean.getBoolean;
 import static java.lang.management.ManagementFactory.getPlatformMBeanServer;
 import static org.eclipse.jetty.util.log.Log.getLog;
@@ -92,6 +91,7 @@ public class JettyServer implements Lifecycle {
 
     }
 
+    @Override
     public synchronized void stop() throws Exception {
         if (server == null) {
             throw new IllegalStateException("Server is not running.  call #start() method to start the server");

@@ -24,14 +24,15 @@ public class ResourceMethod {
     private final List<MethodParameter> parameters;
 
 
-    public ResourceMethod(Method method, Path uri, String httpMethod, Annotation[] annotations, Class returnType) {
+    public ResourceMethod(final Method method, final Path uri, final String httpMethod, final Annotation[] annotations,
+                          final Class<?> returnType) {
         this.method = method;
         this.uri = uri;
-        this.uriPattern = uri == null ? "" : createUriPattern(uri.value());
+        this.uriPattern = uri == null ? "" : createPatternURI(uri.value());
         this.httpMethod = httpMethod;
         this.annotations = annotations;
         this.returnType = returnType;
-        this.parameters =  new ArrayList<MethodParameter>();
+        this.parameters = new ArrayList<>();
     }
 
     /**
@@ -71,10 +72,11 @@ public class ResourceMethod {
      * Creates a URI regex for pattern matching
      * This function is mainly used to created regex of braces in URI's
      * ex: Raw URI -> /workflow/{name}, Regex URI -> /workflow/([^/]+?)
+     *
      * @param uri Raw URI of the method
      * @return URI regex
      */
-    private String createUriPattern(String uri){
+    private String createPatternURI(final String uri) {
         // Regex expression: (/.*)?
         // (): Capturing group - parenthesis means, capture text grouped together within parenthesis
         // []: Bracket - Match any of the characters inside the bracket
@@ -82,23 +84,23 @@ public class ResourceMethod {
         // /: Backslash - Look for backslash symbol
         // +: Plus - One or more
         // ?: Question mark - Match previous zero or more times
-        String regexForBraces = "([^/]+?)";
+        final String regexForBraces = "([^/]+?)";
         // This  indicator is used to assist in parsing/building a raw URI to a regex URI
         boolean okayToProcess = true;
-        StringBuilder uriPattern = new StringBuilder();
+        final StringBuilder patternURI = new StringBuilder();
         for (int i  = 0; i < uri.length(); i++){
-            char c = uri.charAt(i);
+            final char c = uri.charAt(i);
             if (c == '{') {
-                uriPattern.append(regexForBraces);
+                patternURI.append(regexForBraces);
                 okayToProcess = false;
             } else if  (c == '}') {
                 okayToProcess = true;
             }
             if (okayToProcess && c != '}'){
-                uriPattern.append(c);
+                patternURI.append(c);
             }
         }
-        return uriPattern.toString();
+        return patternURI.toString();
     }
 
     /**
@@ -108,17 +110,18 @@ public class ResourceMethod {
      */
     public static class MethodParameter {
 
-        public enum ParameterAnnotationType {ENTITY, QUERY, PATH};
+        public enum ParameterAnnotationType {ENTITY, QUERY, PATH}
+
         private final Class<?> parameterClass;
         private final Type parameterType;
         private final Annotation parameterAnnotation;
-        private final ParameterAnnotationType parameterAnnotationType ;
+        private final ParameterAnnotationType parameterAnnotationType;
         private final String parameterDefaultValue;
         private final String parameterName;
 
-        public MethodParameter(Class<?> parameterClass, Type parameterType, Annotation parameterAnnotation,
-                               ParameterAnnotationType parameterAnnotationType, String parameterDefaultValue,
-                               String parameterName){
+        public MethodParameter(final Class<?> parameterClass, final Type parameterType, final Annotation parameterAnnotation,
+                               final ParameterAnnotationType parameterAnnotationType, final String parameterDefaultValue,
+                               final String parameterName) {
             this.parameterClass = parameterClass;
             this.parameterType = parameterType;
             this.parameterAnnotation = parameterAnnotation;
@@ -145,10 +148,12 @@ public class ResourceMethod {
 
         /**
          * Get the name of the parameter
+         *
          * @return Parameter name
          */
         public String getParameterName() {
             return parameterName;
         }
+
     }
 }

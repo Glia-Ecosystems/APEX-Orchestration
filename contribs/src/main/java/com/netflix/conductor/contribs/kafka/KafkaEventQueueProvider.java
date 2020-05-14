@@ -21,44 +21,47 @@ import static java.lang.Boolean.getBoolean;
 @Singleton
 public class KafkaEventQueueProvider implements EventQueueProvider {
     private static final Logger logger = LoggerFactory.getLogger(KafkaEventQueueProvider.class);
-    protected Map<String, KafkaObservableQueue> queues = new ConcurrentHashMap<>();
-    private Configuration config;
+    protected final Map<String, KafkaObservableQueue> queues = new ConcurrentHashMap<>();
+    private final Configuration config;
 
     /**
      * Initialization of the KafkaEventQueueProvider class
-     * @param config Main configuration file for the Conductor application
+     *
+     * @param config   Main configuration file for the Conductor application
      * @param injector Google Dependency Injector object that builds the graph of objects for applications
      */
     @Inject
-    public KafkaEventQueueProvider(Configuration config, Injector injector){
+    public KafkaEventQueueProvider(final Configuration config, final Injector injector) {
         this.config = config;
         logger.info("Kafka Event Queue Provider initialized.");
-        if (getBoolean("conductor.kafka.listener.enabled")){
+        if (getBoolean("conductor.kafka.listener.enabled")) {
             startKafkaListener(injector);
         }
     }
 
     /**
      * Implements getQueue function for providing a KafkaObservableQueue object with given topic
+     *
      * @param queueURI The topic for kafka to subscribe to for consuming and publishing messages
      * @return Initialization of a KafkaObservableQueue object stored in the queue
      */
     @Override
-    public ObservableQueue getQueue(String queueURI) {
+    public ObservableQueue getQueue(final String queueURI) {
         return queues.computeIfAbsent(queueURI, q -> new KafkaObservableQueue(queueURI, config));
     }
 
     /**
      * Starts the process for the Kafka Listener to process client requests to Conductor via Kafka
+     *
      * @param injector Google Dependency Injector object that builds the graph of objects for applications
      */
-    public void startKafkaListener(Injector injector) {
-        String topic = config.getProperty("kafka.topic", "");
+    public void startKafkaListener(final Injector injector) {
+        final String topic = config.getProperty("kafka.topic", "");
         if (topic.isEmpty()) {
             logger.error("Configuration missing for Kafka topic.");
             throw new IllegalArgumentException("Configuration missing for Kafka topic.");
         }
-        Thread kafkaListener = new Thread(new KafkaObservableQueue(topic, config, injector));
+        final Thread kafkaListener = new Thread(new KafkaObservableQueue(topic, config, injector));
         kafkaListener.setDaemon(true);
         kafkaListener.start();
         logger.info("Kafka Listener Started.");

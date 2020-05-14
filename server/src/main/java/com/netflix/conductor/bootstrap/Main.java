@@ -40,18 +40,18 @@ public class Main {
             PropertyConfigurator.configure(new FileInputStream(new File(args[1])));
         }
 
-        Injector bootstrapInjector = Guice.createInjector(new BootstrapModule());
-        ModulesProvider modulesProvider = bootstrapInjector.getInstance(ModulesProvider.class);
-        Injector serverInjector = Guice.createInjector(modulesProvider.get());
+        final Injector bootstrapInjector = Guice.createInjector(new BootstrapModule());
+        final ModulesProvider modulesProvider = bootstrapInjector.getInstance(ModulesProvider.class);
+        final Injector serverInjector = Guice.createInjector(modulesProvider.get());
 
-        Optional<EmbeddedElasticSearch> embeddedElasticSearch = serverInjector.getInstance(EmbeddedElasticSearchProvider.class).get();
+        final Optional<EmbeddedElasticSearch> embeddedElasticSearch = serverInjector.getInstance(EmbeddedElasticSearchProvider.class).get();
         embeddedElasticSearch.ifPresent(BootstrapUtil::startEmbeddedElasticsearchServer);
 
         BootstrapUtil.setupIndex(serverInjector.getInstance(IndexDAO.class));
 
         try {
             serverInjector.getInstance(IndexDAO.class).setup();
-        } catch (Exception e) {
+        } catch (final Exception e) {
             e.printStackTrace(System.err);
             System.exit(3);
         }
@@ -65,14 +65,14 @@ public class Main {
         System.out.println(" \\___\\___/|_| |_|\\__,_|\\__,_|\\___|\\__\\___/|_|   ");
         System.out.println("\n\n\n");
 
-        Optional<GRPCServer> grpcServer = serverInjector.getInstance(GRPCServerProvider.class).get();
+        final Optional<GRPCServer> grpcServer = serverInjector.getInstance(GRPCServerProvider.class).get();
 
         grpcServer.ifPresent(BootstrapUtil::startGRPCServer);
 
         serverInjector.getInstance(JettyServerProvider.class).get().ifPresent(server -> {
             try {
                 server.start();
-            } catch (Exception ioe) {
+            } catch (final Exception ioe) {
                 ioe.printStackTrace(System.err);
                 System.exit(3);
             }

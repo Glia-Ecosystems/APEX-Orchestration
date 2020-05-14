@@ -31,16 +31,14 @@ import java.util.regex.Pattern;
 public class ResourceHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(ResourceHandler.class);
-    private String RESOURCE_PATH = "com.netflix.conductor.server.resources";
+    private static final String RESOURCE_PATH = "com.netflix.conductor.server.resources";
     private final ResourcesLoader resourcesLoader;
-    private final ResourceUtilities util;
-    private final Map<String, Resource> resourceMap = new HashMap<String, Resource>();
+    private final Map<String, Resource> resourceMap = new HashMap<>();
     private final Injector injector;
 
     @Inject
-    public ResourceHandler(Injector injector) {
-        this.util = new ResourceUtilities();
-        this.resourcesLoader = new ResourcesLoader(RESOURCE_PATH, util);
+    public ResourceHandler(final Injector injector) {
+        this.resourcesLoader = new ResourcesLoader(RESOURCE_PATH);
         this.injector = injector;
         init();
     }
@@ -53,9 +51,9 @@ public class ResourceHandler {
         resourcesLoader.locateResources();
 
         // Build resource map for processing client requests
-        for (final Class<?> clazz: resourcesLoader.getClasses()){
-            Path uri = clazz.getAnnotation(Path.class);
-            Resource resource = ResourceBuilder.buildResource(new Resource(clazz, uri));
+        for (final Class<?> clazz : resourcesLoader.getClasses()) {
+            final Path uri = clazz.getAnnotation(Path.class);
+            final Resource resource = ResourceBuilder.buildResource(new Resource(clazz, uri));
             // Regex expression: (/.*)?
             // (): Capturing group - parenthesis means, capture text grouped together within parenthesis
             // /: Backslash - Look for backslash symbol
@@ -68,9 +66,10 @@ public class ResourceHandler {
 
     /**
      * Main function for processing client requests  to the  Conductor API
-     * @param path URI path of the requested resource
+     *
+     * @param path       URI path of the requested resource
      * @param httpMethod HTTP method to assist in identify the requested service from the resource
-     * @param entity The argument to be sent to the resource service
+     * @param entity     The argument to be sent to the resource service
      * @return Response from resource
      */
     public ResponseContainer processRequest(final String path, final String httpMethod, final Object entity) {
@@ -84,11 +83,11 @@ public class ResourceHandler {
         if (requestedResource == null) {
             response.setStatus(404);
             response.setResponseEntity(Status.NOT_FOUND);
-            response.setResponseErrorMessage("Resource for requested URI " + request.getResourceURI() + "can not be found");
+            response.setResponseErrorMessage("Resource for requested URI " + request.getResourceURI() + " can not be found");
             return response;
         }
         // Remove the base URI and to get only the URI for the requested method/service of the resource
-        String methodUri = path.replace(requestedResource.getPathURI().value(), "");
+        final String methodUri = path.replace(requestedResource.getPathURI().value(), "");
         // Get the requested method from the resource
         final ResourceMethod requestedService = getRequestedService(request, requestedResource, methodUri);
         // If the method can't be found send back a response that the method can not be found for given URI
@@ -104,15 +103,16 @@ public class ResourceHandler {
 
     /**
      * Searches the resource map for the requested resource class
+     *
      * @param request Contains all the needed information for processing the request
      * @return Resource object of resource class. If not found, null is returned
      */
-    private Resource getRequestedResource(final RequestContainer request){
-        for (String k: resourceMap.keySet()) {
-            Pattern p = Pattern.compile(k);
-            Matcher m = p.matcher(request.getResourceURI());
-            if(m.matches()){
-                return resourceMap.get(k);
+    private Resource getRequestedResource(final RequestContainer request) {
+        for (final Map.Entry<String, Resource> entry : resourceMap.entrySet()) {
+            final Pattern p = Pattern.compile(entry.getKey());
+            final Matcher m = p.matcher(request.getResourceURI());
+            if (m.matches()) {
+                return entry.getValue();
             }
         }
         return null;
@@ -120,17 +120,18 @@ public class ResourceHandler {
 
     /**
      * Searches the resource method map for the requested service
+     *
      * @param requestContainer Contains all the needed information for processing the request
-     * @param resource Resource object of the requested resource class
-     * @param methodURI URI of the requested service
+     * @param resource         Resource object of the requested resource class
+     * @param methodURI        URI of the requested service
      * @return ResourceMethod object of the requested method. If not found, null is returned
      */
     private ResourceMethod getRequestedService(final RequestContainer requestContainer, final Resource resource,
-                                               final String methodURI){
-        for (ResourceMethod resourceMethod: resource.getMethods().get(requestContainer.getHttpMethod())){
-            Pattern p = Pattern.compile(resourceMethod.getUriPattern());
-            Matcher m = p.matcher(methodURI);
-            if(m.matches()){
+                                               final String methodURI) {
+        for (final ResourceMethod resourceMethod : resource.getMethods().get(requestContainer.getHttpMethod())) {
+            final Pattern p = Pattern.compile(resourceMethod.getUriPattern());
+            final Matcher m = p.matcher(methodURI);
+            if (m.matches()) {
                 return resourceMethod;
             }
         }
@@ -139,19 +140,21 @@ public class ResourceHandler {
 
     /**
      * Verifies the given URI is of correct syntax
+     *
      * @param path Given URI from client request
      * @return URI for requested resource
      */
-    public String verifyRequestedURIPath(String path){
+    public String verifyRequestedURIPath(final String path) {
         return path.startsWith("/") ? path : "/" + path;
     }
 
     /**
      * Verifies the given HTTP method is capitalized
+     *
      * @param httpMethod Given HTTP method from client request
      * @return Upper Case HTTP method
      */
-    public String verifyRequestedHTTPMethod(String httpMethod){
+    public String verifyRequestedHTTPMethod(final String httpMethod) {
         return httpMethod.toUpperCase();
     }
 
@@ -167,16 +170,13 @@ public class ResourceHandler {
                                              final Resource requestedResource, final ResourceMethod requestedMethod) {
         Object serviceResponse = null;
         try {
-            final Object resourceInstance = getResourceInstance(requestedResource.getResource());
-            if (requestedMethod.getParameters().size() != 0) {
-                // Get parameter arguments for method
-                final Object[] methodArguments = getMethodArguments(request, requestedMethod, requestedResource);
-                serviceResponse = callService(resourceInstance, requestedMethod.getMethod(), methodArguments);
-            } else {
-                serviceResponse = callService(resourceInstance, requestedMethod.getMethod());
-            }
-        } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            final Object resourceInstance = getResourceInstance(requestedResource.getResourceClass());
+            final Object[] methodArguments = getMethodArguments(request, requestedMethod, requestedResource);
+            serviceResponse = callService(resourceInstance, requestedMethod.getMethod(), methodArguments);
+        } catch (final Exception ex) {
+            logger.error("Error occurred while executing the request on the resource method. Error: {}", ex.getMessage());
+            response.setResponseErrorMessage("Error occurred while executing the request on the resource method. " +
+                    "Error: " + ex);
         }
         return processResponse(response, serviceResponse);
     }
@@ -187,33 +187,41 @@ public class ResourceHandler {
      * @param response Response from the Conductor API
      * @return Contains all the needed information about the response from the Conductor API
      */
-    private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response){
-        responseContainer.setStatus(200);
-        responseContainer.setStatusType(Status.OK);
+    private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response) {
+        if ("".equals(responseContainer.responseErrorMessage)) {
+            // If no error message respond that everything went okay with process request
+            responseContainer.setStatus(200);
+            responseContainer.setStatusType(Status.OK);
+        } else {
+            // If an error occurred, set internal server error status
+            responseContainer.setStatus(500);
+            responseContainer.setStatusType(Status.INTERNAL_SERVER_ERROR);
+        }
         responseContainer.setResponseEntity(response);
         return responseContainer;
     }
 
     /**
      * Filter through the parameters of the requested method and gets the necessary arguments for the method
-     * @param requestContainer Response object for sending all needed information about the response from the Conductor API
-     * @param resourceMethod  ResourceMethod object of the requested method
+     *
+     * @param requestContainer  Response object for sending all needed information about the response from the Conductor API
+     * @param resourceMethod    ResourceMethod object of the requested method
      * @param requestedResource Resource object of the requested resource class
      * @return List of the arguments for the requested method
      */
     private Object[] getMethodArguments(final RequestContainer requestContainer, final ResourceMethod resourceMethod,
-                                            final Resource requestedResource){
+                                        final Resource requestedResource) {
         final List<MethodParameter> parameters = resourceMethod.getParameters();
-        Object[] arguments = new Object[parameters.size()];
-        for (int i = 0; i < parameters.size(); i++){
-            String parameterAnnotationType = parameters.get(i).getParameterAnnotationType().name();
+        final Object[] arguments = new Object[parameters.size()];
+        for (int i = 0; i < parameters.size(); i++) {
+            final String parameterAnnotationType = parameters.get(i).getParameterAnnotationType().name();
             if (parameterAnnotationType.equals("PATH")) {
                 arguments[i] = getPathParmValue(requestContainer.getResourceURI(), resourceMethod.getUri().value(),
                         parameters.get(i).getParameterName(), requestedResource.getPathURI().value());
-            }else if (parameterAnnotationType.equals("QUERY")) {
+            } else if (parameterAnnotationType.equals("QUERY")) {
                 arguments[i] = getQueryParmValue(requestContainer.getResourceURI(), parameters.get(i).getParameterName(),
                         parameters.get(i).getParameterDefaultValue());
-            }else {
+            } else {
                 arguments[i] = requestContainer.getEntity();
             }
         }
@@ -222,19 +230,20 @@ public class ResourceHandler {
 
     /**
      * Get the argument for a PathParm annotated parameter
-     * @param requestedURI Requested URI by client
-     * @param methodURI URI of the requested method
+     *
+     * @param requestedURI  Requested URI by client
+     * @param methodURI     URI of the requested method
      * @param parameterName Name of the parameter
-     * @param resourceURI URI of the requested resource
+     * @param resourceURI   URI of the requested resource
      * @return The argument for a PathParm annotated parameter
      */
     private String getPathParmValue(final String requestedURI, final String methodURI, final String parameterName,
-                                    final String resourceURI){
-        String uriOfInterest = requestedURI.replace(resourceURI, "");
-        String[] uriSplit = uriOfInterest.split("/");
-        String[] methodURISplit = methodURI.split("/");
+                                    final String resourceURI) {
+        final String uriOfInterest = requestedURI.replace(resourceURI, "");
+        final String[] uriSplit = uriOfInterest.split("/");
+        final String[] methodURISplit = methodURI.split("/");
         for (int i = 0; i < methodURISplit.length; i++) {
-            if (methodURISplit[i].equals("{"+parameterName+"}")) {
+            if (methodURISplit[i].equals("{" + parameterName + "}")) {
                 return uriSplit[i];
             }
         }
@@ -250,9 +259,9 @@ public class ResourceHandler {
      */
     private String getQueryParmValue(final String requestedURI, final String parameterName, final String parameterDefaultValue){
         if (requestedURI.contains("?") && requestedURI.contains(parameterName)) {
-            String uriQueries = requestedURI.substring(requestedURI.lastIndexOf('?') + 1);
-            for (String query : uriQueries.split("&")) {
-                String[] parameter = query.split("=");
+            final String uriQueries = requestedURI.substring(requestedURI.lastIndexOf('?') + 1);
+            for (final String query : uriQueries.split("&")) {
+                final String[] parameter = query.split("=");
                 if (parameter[0].equals("version")) {
                     return parameter[1];
                 }
@@ -274,12 +283,11 @@ public class ResourceHandler {
      * @param clazz Resource class
      * @return Instance of the resource class
      */
-    private Object getResourceInstance(final  Class<?> clazz) throws Throwable {
+    private Object getResourceInstance(final Class<?> clazz) {
         try {
             return injector.getInstance(clazz);
-        } catch (ProvisionException ex) {
-            logger.error(String.valueOf(ex.getErrorMessages()));
-            throw ex.getCause();
+        } catch (final ProvisionException ex) {
+            throw new ProvisionException("Instance of resource could not be loaded by injector", ex);
         }
     }
 
@@ -300,13 +308,13 @@ public class ResourceHandler {
     /**
      * Container object for the client request
      */
-    private static class RequestContainer{
+    private static class RequestContainer {
 
         private final String resourceURI;
         private final String httpMethod;
         private final Object entity;
 
-        public RequestContainer(final String resourceURI, final String httpMethod, final Object entity){
+        public RequestContainer(final String resourceURI, final String httpMethod, final Object entity) {
             this.resourceURI = resourceURI;
             this.httpMethod = httpMethod;
             this.entity = entity;
@@ -330,31 +338,45 @@ public class ResourceHandler {
 
         /**
          * Get the entity for the request
+         *
          * @return Entity
          */
         public Object getEntity() {
             return entity;
+        }
+
+        /**
+         * Creates a map containing the field values of Request Container
+         *
+         * @return Map of the field values of the class
+         */
+        public Map<String, Object> getRequestData() {
+            final Map<String, Object> resquestData = new HashMap<>();
+            resquestData.put("resourceURI", resourceURI);
+            resquestData.put("httpMethod", httpMethod);
+            resquestData.put("entity", entity);
+            return resquestData;
         }
     }
 
     /**
      * Container object for the Conductor API response
      */
-    public static class ResponseContainer{
+    public static class ResponseContainer {
 
         private final String dateTime;
-        private final RequestContainer request;
+        private final Map<String, Object> request;
         private int status;
         private StatusType statusType;
         private String responseErrorMessage;
         private Object responseEntity;
 
-        public ResponseContainer(RequestContainer request) {
+        public ResponseContainer(final RequestContainer request) {
             this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
-            this.request = request;
+            this.request = request.getRequestData();
             this.status = 204;
             this.statusType = Status.NO_CONTENT;
-            this.responseEntity = null;
+            this.responseEntity = "";
             this.responseErrorMessage = "";
         }
 
@@ -367,41 +389,61 @@ public class ResourceHandler {
             this.request = null;
             this.status = 204;
             this.statusType = Status.NO_CONTENT;
-            this.responseEntity = null;
+            this.responseEntity = "";
             this.responseErrorMessage = "";
 
         }
 
         /**
          * Set the response from the resource method to the conatiner
+         *
          * @param responseEntity The response from the service
          */
-        public void setResponseEntity(Object responseEntity) {
+        public void setResponseEntity(final Object responseEntity) {
             this.responseEntity = responseEntity;
         }
 
         /**
          * Set the error message if an error have occurred
-         * @param responseErrorMessage  Error message
+         *
+         * @param responseErrorMessage Error message
          */
-        public void setResponseErrorMessage(String responseErrorMessage) {
+        public void setResponseErrorMessage(final String responseErrorMessage) {
             this.responseErrorMessage = responseErrorMessage;
         }
 
         /**
          * Set the status type of the response from the service
+         *
          * @param statusType Response status enum
          */
-        public void setStatusType(StatusType statusType) {
+        public void setStatusType(final StatusType statusType) {
             this.statusType = statusType;
         }
 
         /**
          * Set the status code of the response
+         *
          * @param status Status   code
          */
-        public void setStatus(int status) {
+        public void setStatus(final int status) {
             this.status = status;
+        }
+
+        /**
+         * Creates a map containing the field values of Response Container
+         *
+         * @return Map of the field values of the class
+         */
+        public Map<String, Object> getResponseData() {
+            final Map<String, Object> responseData = new HashMap<>();
+            responseData.put("dateTime", dateTime);
+            responseData.put("request", (request == null) ? "" : request);
+            responseData.put("status", status);
+            responseData.put("statusType", statusType);
+            responseData.put("responseEntity", (responseEntity == null) ? "" : responseEntity);
+            responseData.put("responseErrorMessage", responseErrorMessage);
+            return responseData;
         }
 
     }

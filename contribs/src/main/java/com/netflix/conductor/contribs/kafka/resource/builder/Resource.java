@@ -17,14 +17,14 @@ import java.util.Map;
  */
 public class Resource {
 
-    private final Class<?> resource;
+    private final Class<?> resourceClass;
     private final Path pathURI;
     private final List<Field> fields;
     private final List<Constructor<?>> constructors;
     private final Map<String, List<ResourceMethod>> methods;
 
-    public Resource(Class<?> resource, Path uri) {
-        this.resource = resource;
+    public Resource(final Class<?> resourceClass, final Path uri) {
+        this.resourceClass = resourceClass;
         this.pathURI = uri;
         this.fields = new ArrayList<>();
         this.constructors = new ArrayList<>();
@@ -33,6 +33,7 @@ public class Resource {
 
     /**
      * Get URI path
+     *
      * @return URI
      */
     public Path getPathURI() {
@@ -41,11 +42,11 @@ public class Resource {
 
     /**
      * Get Resource class
+     *
      * @return Resource class
      */
-    public Class<?> getResource() {
-        return resource;
-    }
+    public Class<?> getResourceClass() {
+        return resourceClass; }
 
     /**
      * Get list of resource fields

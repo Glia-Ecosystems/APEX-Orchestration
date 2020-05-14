@@ -17,8 +17,15 @@ import java.util.*;
 public class ResourceBuilder {
 
     /**
+     * This allows the class to not be instantiated as an object
+     */
+    private ResourceBuilder() {
+    }
+
+    /**
      * Builds the resource object by using reflection to get needed information
      * from the resource class
+     *
      * @param resource Contains information about a resource
      * @return Completed resource object of the needed information of a resource class
      */
@@ -38,10 +45,10 @@ public class ResourceBuilder {
      * @param resource Contains information about a resource
      */
     private static void resourceConstructors(final Resource resource){
-        Class<?> resourceClass = resource.getResource();
+        final Class<?> resourceClass = resource.getResourceClass();
         // Gets an array of all the public constructors of the class
         final Constructor<?>[] constructors = resourceClass.getConstructors();
-        for (Constructor<?> constructor: constructors){
+        for (final Constructor<?> constructor : constructors) {
             resource.getConstructors().add(constructor);
         }
     }
@@ -51,10 +58,10 @@ public class ResourceBuilder {
      * @param resource Contains information about a resource
      */
     private static void resourceFields(final Resource resource) {
-        Class<?> resourceClass = resource.getResource();
+        final Class<?> resourceClass = resource.getResourceClass();
         // Gets an array of all the public fields declared in the class
         final Field[] fields = resourceClass.getFields();
-        for (Field field: fields){
+        for (final Field field : fields) {
             resource.getFields().add(field);
         }
     }
@@ -63,20 +70,20 @@ public class ResourceBuilder {
      * Uses reflection to get the methods and its parameters of a  resource class
      * @param resource Contains information about a resource
      */
-    private static void resourceMethods(final Resource resource){
-        Class<?> resourceClass = resource.getResource();
+    private static void resourceMethods(final Resource resource) {
+        final Class<?> resourceClass = resource.getResourceClass();
         // Gets an array of all the public methods of the class
         final Method[] methods = resourceClass.getMethods();
-        for (Method method: methods) {
-            for (Annotation annotation: method.getAnnotations()){
-                if (annotation.annotationType().getAnnotation(HttpMethod.class) != null){
+        for (final Method method : methods) {
+            for (final Annotation annotation : method.getAnnotations()) {
+                if (annotation.annotationType().getAnnotation(HttpMethod.class) != null) {
                     // Gets the class object of the return type
-                    Class<?> returnType = method.getReturnType();
+                    final Class<?> returnType = method.getReturnType();
                     // Gets an array of all the method annotations in declaring order
-                    Annotation[] annotations = method.getAnnotations();
+                    final Annotation[] annotations = method.getAnnotations();
                     // Gets a string representation of the HTTP annotation of the method
-                    String httpMethod = annotation.annotationType().getAnnotation(HttpMethod.class).value();
-                    ResourceMethod resourceMethod =  new ResourceMethod(method, method.getAnnotation(Path.class),
+                    final String httpMethod = annotation.annotationType().getAnnotation(HttpMethod.class).value();
+                    final ResourceMethod resourceMethod = new ResourceMethod(method, method.getAnnotation(Path.class),
                             httpMethod, annotations, returnType);
                     addMethodToResource(resource, resourceMethod, httpMethod);
                     resourceMethodParameters(resourceMethod, method);
@@ -96,7 +103,7 @@ public class ResourceBuilder {
      */
     private static void addMethodToResource(final Resource resource, final ResourceMethod resourceMethod,
                                             final String httpMethod){
-        Map<String, List<ResourceMethod>> methodMap = resource.getMethods();
+        final Map<String, List<ResourceMethod>> methodMap = resource.getMethods();
         if (methodMap.get(httpMethod) != null){
             methodMap.get(httpMethod).add(resourceMethod);
         } else {
@@ -112,14 +119,14 @@ public class ResourceBuilder {
      */
     private static void resourceMethodParameters(final ResourceMethod resourceMethod, final Method method) {
         // Gets an array of the class object of the parameter type in declaration order
-        Class<?>[] parameterTypes = method.getParameterTypes();
+        final Class<?>[] parameterTypes = method.getParameterTypes();
         // Gets an array of the type object of the parameter type in declaration order
-        Type[] genericParameterTypes = method.getGenericParameterTypes();
+        final Type[] genericParameterTypes = method.getGenericParameterTypes();
         // Gets an array of arrays of any annotations of the parameters in declaration order
-        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        final Annotation[][] parameterAnnotations = method.getParameterAnnotations();
 
         for (int i = 0; i < parameterTypes.length; i++) {
-            MethodParameter parameter = resourceMethodParameterAnnotations(parameterTypes[i],
+            final MethodParameter parameter = resourceMethodParameterAnnotations(parameterTypes[i],
                     genericParameterTypes[i], parameterAnnotations[i]);
             resourceMethod.getParameters().add(parameter);
         }
@@ -141,7 +148,7 @@ public class ResourceBuilder {
         String parameterName = null;
         String parameterDefaultValue = null;
 
-        for (Annotation annotation : parameterAnnotations) {
+        for (final Annotation annotation : parameterAnnotations) {
             if (PathParam.class == annotation.annotationType()) {
                 parameterAnnotation = annotation;
                 parameterAnnotationType = ParameterAnnotationType.PATH;
