@@ -173,7 +173,7 @@ public class ResourceHandler {
             final Object[] methodArguments = getMethodArguments(request, requestedMethod, requestedResource);
             serviceResponse = callService(resourceInstance, requestedMethod.getMethod(), methodArguments);
         } catch (final Exception ex) {
-            logger.error("Error occurred while executing the request on the resource method", ex);
+            logger.error("Error occurred while executing the request on the resource method. {}", ex.getMessage());
             response.setResponseErrorMessage("Error occurred while executing the request on the resource method. " +
                     "Error: " + ex);
         }

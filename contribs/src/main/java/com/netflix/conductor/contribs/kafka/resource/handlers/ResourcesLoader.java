@@ -65,7 +65,7 @@ public class ResourcesLoader {
                 readJarFile(urls.nextElement());
             }
         } catch (final IOException ex) {
-            logger.error("Can not locate Resources for Kafka Listener", ex);
+            logger.error("Can not locate Resources for Kafka Listener. {}", ex.getMessage());
         }
     }
 
@@ -83,7 +83,7 @@ public class ResourcesLoader {
         try (final BufferedInputStream inputStream = new BufferedInputStream(new URL(jarFileUrl).openStream())) {
             read(inputStream, resourceParentPath);
         } catch (final IOException ex) {
-            logger.error("Error attempting to scan the JarFile {}", jarFileUrl, ex);
+            logger.error("Error attempting to scan the JarFile {} {}", jarFileUrl, ex.getMessage());
         }
     }
 
