@@ -20,10 +20,12 @@ public class KafkaMessageHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaMessageHandler.class);
     private final ResourceHandler resourceHandler;
+    private final ObjectMapper objectMapper;
     private String errorMessage;
 
-    public KafkaMessageHandler(final ResourceHandler resourceHandler){
+    public KafkaMessageHandler(final ResourceHandler resourceHandler, final ObjectMapper objectMapper) {
         this.resourceHandler = resourceHandler;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -40,7 +42,7 @@ public class KafkaMessageHandler {
             responseContainer.setResponseEntity(message.getPayload());
             return new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
         }
-        //Verifies client message for Conductor
+        // Verifies client message for Conductor
         if (requestMessageErrors(request)) {
             final ResponseContainer responseContainer = new ResponseContainer();
             responseContainer.setResponseErrorMessage(errorMessage);
@@ -75,14 +77,14 @@ public class KafkaMessageHandler {
 
     /**
      * Converts a Json string to a Map object
+     *
      * @param payload The client request retrieved from Kafka
      * @return Map object of the client request
      */
-    private <T> Map<String, T> jsonStringToMap(final String payload){
-        final ObjectMapper mapper = new ObjectMapper();
-        Map<String, T> message = null;
+    private Map<String, Object> jsonStringToMap(final String payload) {
+        Map<String, Object> message = null;
         try {
-            message = mapper.readValue(payload, new TypeReference<Map<String, T>>() {
+            message = objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {
             });
         } catch (final JsonProcessingException e) {
             logger.error("Error converting deserialize json to map. {}", e.getMessage());
@@ -98,14 +100,15 @@ public class KafkaMessageHandler {
      * @return Json string message
      */
     private String toJSONString(final Object response) {
-        final ObjectMapper mapper = new ObjectMapper();
         final String responseMessage;
         try {
-            responseMessage = mapper.writeValueAsString(response);
-        } catch (final JsonProcessingException e) {
-            // logger.error("Error converting response message to json", e);
-            // responseMessage = "Error converting response message to json: " + e.toString();
-            throw new RuntimeException("Error converting response message to json", e);
+            responseMessage = objectMapper.writeValueAsString(response);
+        } catch (final JsonProcessingException ex) {
+            // Check if we want to throw this exception
+            String error = "Error converting response message to json. Error: " + ex.getMessage() + " Cause: "
+                    + ex.getCause();
+            logger.error(error);
+            throw new RuntimeException("Error converting response message to json", ex.getCause());
         }
         return responseMessage;
     }
