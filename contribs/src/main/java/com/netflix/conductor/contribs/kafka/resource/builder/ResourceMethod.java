@@ -62,6 +62,7 @@ public class ResourceMethod {
 
     /**
      * Get the URI of the method
+     *
      * @return Method URI
      */
     public Path getUri() {
@@ -155,5 +156,13 @@ public class ResourceMethod {
             return parameterName;
         }
 
+        /**
+         * Get the type object of the parameter
+         *
+         * @return Parameter type
+         */
+        public Type getParameterType() {
+            return parameterType;
+        }
     }
 }

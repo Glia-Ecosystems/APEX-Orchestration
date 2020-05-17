@@ -1,5 +1,7 @@
 package com.netflix.conductor.contribs.kafka.resource.handlers;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.google.inject.Inject;
 import com.google.inject.ProvisionException;
 import com.netflix.conductor.contribs.kafka.resource.builder.Resource;
@@ -13,13 +15,16 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.Response.StatusType;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,10 +40,12 @@ public class ResourceHandler {
     private final ResourcesLoader resourcesLoader;
     private final Map<String, Resource> resourceMap = new HashMap<>();
     private final Injector injector;
+    private final ObjectMapper objectMapper;
 
     @Inject
-    public ResourceHandler(final Injector injector) {
+    public ResourceHandler(final Injector injector, final ObjectMapper objectMapper) {
         this.resourcesLoader = new ResourcesLoader(RESOURCE_PATH);
+        this.objectMapper = objectMapper;
         this.injector = injector;
         init();
     }
@@ -173,27 +180,40 @@ public class ResourceHandler {
             final Object resourceInstance = getResourceInstance(requestedResource.getResourceClass());
             final Object[] methodArguments = getMethodArguments(request, requestedMethod, requestedResource);
             serviceResponse = callService(resourceInstance, requestedMethod.getMethod(), methodArguments);
-        } catch (final Exception ex) {
-            logger.error("Error occurred while executing the request on the resource method. Error: {}", ex.getMessage());
-            response.setResponseErrorMessage("Error occurred while executing the request on the resource method. " +
-                    "Error: " + ex);
+        } catch (final IllegalAccessException | IOException ex) {
+            String logError = "Error occurred while executing the request on the resource method. Error: " + ex + " Cause: " + ex.getCause();
+            String clientResponseError = "Error occurred while executing the request on the resource method. Cause: " + ex.getCause();
+            logger.error(logError);
+            response.setResponseErrorMessage(clientResponseError);
+        } catch (final InvocationTargetException ex) {
+            String logError = "Error occurred while executing the request on the resource method. Error: " + ex + " Cause: " + ex.getCause();
+            String clientResponseError = "Error occurred while executing the request on the resource method. Cause: " + ex.getCause();
+            logger.error(logError);
+            response.setResponseErrorMessage(clientResponseError);
+            return processResponse(response, serviceResponse, true);
         }
-        return processResponse(response, serviceResponse);
+        return processResponse(response, serviceResponse, false);
     }
 
     /**
      * Update response container with response from the Conductor API
-     * @param responseContainer  Response object for sending all needed information about the response from the Conductor API
-     * @param response Response from the Conductor API
+     *
+     * @param responseContainer Response object for sending all needed information about the response from the Conductor API
+     * @param response          Response from the Conductor API
      * @return Contains all the needed information about the response from the Conductor API
      */
-    private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response) {
+    private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response,
+                                              final boolean invocationException) {
         if ("".equals(responseContainer.responseErrorMessage)) {
             // If no error message respond that everything went okay with process request
             responseContainer.setStatus(200);
             responseContainer.setStatusType(Status.OK);
+        } else if (invocationException) {
+            // If an Invocation exception occurred, set internal server error status
+            responseContainer.setStatus(400);
+            responseContainer.setStatusType(Status.BAD_REQUEST);
         } else {
-            // If an error occurred, set internal server error status
+            // If any other exception occurred, set internal server error status
             responseContainer.setStatus(500);
             responseContainer.setStatusType(Status.INTERNAL_SERVER_ERROR);
         }
@@ -210,26 +230,34 @@ public class ResourceHandler {
      * @return List of the arguments for the requested method
      */
     private Object[] getMethodArguments(final RequestContainer requestContainer, final ResourceMethod resourceMethod,
-                                        final Resource requestedResource) {
+                                        final Resource requestedResource) throws IOException {
         final List<MethodParameter> parameters = resourceMethod.getParameters();
         final Object[] arguments = new Object[parameters.size()];
         for (int i = 0; i < parameters.size(); i++) {
             final String parameterAnnotationType = parameters.get(i).getParameterAnnotationType().name();
+            // Get arguments for path param annotated parameters
             if (parameterAnnotationType.equals("PATH")) {
                 arguments[i] = getPathParmValue(requestContainer.getResourceURI(), resourceMethod.getUri().value(),
                         parameters.get(i).getParameterName(), requestedResource.getPathURI().value());
+                // Get arguments for query param annotated parameters
             } else if (parameterAnnotationType.equals("QUERY")) {
                 arguments[i] = getQueryParmValue(requestContainer.getResourceURI(), parameters.get(i).getParameterName(),
                         parameters.get(i).getParameterDefaultValue());
             } else {
-                arguments[i] = requestContainer.getEntity();
+                // Get arguments for entity parameters
+                arguments[i] = getEntityParamValue(parameters.get(i).getParameterType(), requestContainer.getEntity());
             }
         }
         return arguments;
     }
 
     /**
-     * Get the argument for a PathParm annotated parameter
+     * Get the argument for a PathParm annotated parameter by parsing the URI sent by the client
+     * example:
+     * Requested resource: /workflow/{name}, @PathParam("name")
+     * Client Request URI: /workflow/gliaecosystem
+     * <p>
+     * Argument retrieved for method: gliaecosystem
      *
      * @param requestedURI  Requested URI by client
      * @param methodURI     URI of the requested method
@@ -251,7 +279,13 @@ public class ResourceHandler {
     }
 
     /**
-     * Get the argument for a Query annotated parameter
+     * Get the argument for a Query annotated parameter by parsing the URI sent by the client
+     * example:
+     * Requested resource: /workflow/{name}, @QueryParam("example")
+     * Client Request URI: /workflow/gliaecosystem&example=true
+     *
+     * Argument retrieved for method: true
+     *
      * @param requestedURI Requested URI by client
      * @param parameterName Name of the parameter
      * @param parameterDefaultValue Default value for query parameter if not provided with client request
@@ -271,15 +305,38 @@ public class ResourceHandler {
     }
 
     /**
+     * Gets the argument for a entity parameter
      *
+     * @param parameterType Type of the parameter argument
+     * @param entity        Client request of type object that will be converted to the type required by requested method
+     * @return Requested method entity of required type.
+     * @throws IOException Exception for if the entity fails to be turned into an Input Stream or an error occurs
+     *                     converting the object type entity to the requested method required entity type
+     */
+    private Object getEntityParamValue(final Type parameterType, final Object entity) throws IOException {
+        // Gets the object reader with required parsing configs from the object mapper provided from
+        // the JsonMapperProvider class
+        ObjectReader reader = objectMapper.reader();
+        // Sets the parameter required type to the reader for converting the object to type
+        reader = reader.forType(reader.getTypeFactory().constructType(parameterType));
+        // Implements a try-with resource statement that will automatically close resources upon statement
+        // complete or if abrupt as a result of an error
+        try (final BufferedInputStream inputStream = new BufferedInputStream(
+                new ByteArrayInputStream(objectMapper.writeValueAsString(entity).getBytes(StandardCharsets.UTF_8)))) {
+            return reader.readValue(inputStream);
+        }
+    }
+
+    /**
      * Docs: https://google.github.io/guice/api-docs/latest/javadoc/index.html?com/google/inject/Injector.html
      * Warns..
      * Returns the appropriate instance for the given injection key; equivalent to getProvider(key).get().
      * When feasible, avoid using this method, in favor of having Guice inject your dependencies ahead of time.
-     *
+     * <p>
      * In this case the classes are dynamically created upon request of service from client and destroyed after.
-     *
+     * <p>
      * Uses Injector object for dependency injection when instantiating resource classes
+     *
      * @param clazz Resource class
      * @return Instance of the resource class
      */
