@@ -47,7 +47,9 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     private static final String KAFKA_PRODUCER_PREFIX = "kafka.producer.";
     private static final String KAFKA_CONSUMER_PREFIX = "kafka.consumer.";
     private final String queueName;
-    private static final String LISTENER_PRODUCER_TOPIC = "Apex_Response";
+    private final String listenerConsumerTopic;
+    private final String listenerProducerTopic;
+    private final boolean listenerEnabled;
     private final int pollIntervalInMS;
     private final int pollTimeoutInMs;
     private KafkaProducer<String, String> producer;
@@ -56,21 +58,43 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     private KafkaMessageHandler kafkaMessageHandler;
 
 
+    /**
+     * Constructor of KafkaObservableQueue for Conductor Event/System tasks
+     *
+     * @param queueName Topic for consuming or publishing messages via kafka
+     * @param config    Main configuration file for the Conductor application
+     */
     @Inject
-    public KafkaObservableQueue(final String queueName, final Configuration config){
+    public KafkaObservableQueue(final String queueName, final Configuration config) {
         this.queueName = queueName;  // Topic
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
         this.pollTimeoutInMs = config.getIntProperty("kafka.consumer.longPollTimeout", 1000);
+        this.listenerProducerTopic = "";
+        this.listenerConsumerTopic = "";
+        this.listenerEnabled = false;
         init(config);  // Init Kafka producer and consumer properties
     }
 
+    /**
+     * Constructor of KafkaObservableQueue for a kafka listener object for consuming and processing client
+     * requests to Conductor API and publishing responses from Conductor API to client
+     *
+     * @param consumerTopic Topic for consuming messages
+     * @param producerTopic Topic for publishing messages
+     * @param config        Main configuration file for the Conductor application
+     * @param injector      Google Dependency Injector object that builds the graph of objects for applications
+     */
     @Inject
-    public KafkaObservableQueue(final String queueName, final Configuration config, final Injector injector) {
-        this.queueName = queueName;  // Topic
+    public KafkaObservableQueue(final String consumerTopic, final String producerTopic,
+                                final Configuration config, final Injector injector) {
+        this.queueName = "";
         this.kafkaMessageHandler = new KafkaMessageHandler(new ResourceHandler(injector, new JsonMapperProvider().get()),
                 new JsonMapperProvider().get());
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
         this.pollTimeoutInMs = config.getIntProperty("kafka.consumer.longPollTimeout", 1000);
+        this.listenerConsumerTopic = consumerTopic;
+        this.listenerProducerTopic = producerTopic;
+        this.listenerEnabled = true;
         init(config);  // Init Kafka producer and consumer properties
     }
 
@@ -87,10 +111,16 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         // You must set the properties in the .properties files first for creating a producer/consumer object
         final Properties producerProperties = new Properties();
         final Properties consumerProperties = new Properties();
-        consumerProperties.put("group.id", queueName + "_group");
         final String serverId = config.getServerId();
-        consumerProperties.put("client.id", queueName + "_consumer_" + serverId);
-        producerProperties.put("client.id", queueName + "_producer_" + serverId);
+        if (listenerEnabled) {
+            consumerProperties.put("group.id", listenerConsumerTopic + "_group");
+            consumerProperties.put("client.id", listenerConsumerTopic + "_consumer_" + serverId);
+            producerProperties.put("client.id", listenerProducerTopic + "_producer_" + serverId);
+        } else {
+            consumerProperties.put("group.id", queueName + "_group");
+            consumerProperties.put("client.id", queueName + "_consumer_" + serverId);
+            producerProperties.put("client.id", queueName + "_producer_" + serverId);
+        }
         final Map<String, Object> configurationMap = config.getAll();
         if (Objects.isNull(configurationMap)) {
             throw new RuntimeException("Configuration missing");
@@ -120,9 +150,18 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
             // Init Kafka producer and consumer
             producer = new KafkaProducer<>(producerProperties);
             consumer = new KafkaConsumer<>(consumerProperties);
-            // Assumption is that the queueName provided is already configured within the Kafka cluster.
-            consumer.subscribe(Collections.singletonList(queueName));  // This is where Consumer subscribe to given Topic
-            logger.info("KafkaObservableQueue initialized for {}", queueName);
+            // Assumption is that the consumer topic (queueName/listenerConsumerTopic) provided is already configured
+            // within the Kafka cluster.
+            // This is where Consumer subscribe to given Topic
+            if (listenerEnabled) {
+                consumer.subscribe(Collections.singletonList(listenerConsumerTopic));
+                logger.info("KafkaObservableQueue initialized. Listening to {} (consumer topic) for consuming and " +
+                                "processing client requests. Responses will be published to {} (producer topic)",
+                        listenerConsumerTopic, listenerProducerTopic);
+            } else {
+                consumer.subscribe(Collections.singletonList(queueName));
+                logger.info("KafkaObservableQueue initialized for {} topic", queueName);
+            }
         } catch (final KafkaException ke) {
             throw new RuntimeException("Kafka initialization failed.", ke);
         }
@@ -240,11 +279,13 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
      */
     @VisibleForTesting()
     public void publishMessages(final List<Message> messages) {
+        String topicForPublishing = (listenerEnabled) ? listenerProducerTopic : queueName;
         if (messages == null || messages.isEmpty()) {
             return;
         }
         for (final Message message : messages) {
-            final ProducerRecord<String, String> record = new ProducerRecord<>(LISTENER_PRODUCER_TOPIC, message.getId(), message.getPayload());
+            final ProducerRecord<String, String> record = new ProducerRecord<>(topicForPublishing, message.getId(),
+                    message.getPayload());
             final RecordMetadata metadata;
             try {
                 metadata = producer.send(record).get();
@@ -253,13 +294,13 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
                 logger.debug(producerLogging);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.error("Publish message to kafka topic {} failed with an error: {}", LISTENER_PRODUCER_TOPIC, e.getMessage(), e);
+                logger.error("Publish message to kafka topic {} failed with an error: {}", topicForPublishing, e.getMessage(), e);
             } catch (final ExecutionException e) {
-                logger.error("Publish message to kafka topic {} failed with an error: {}", LISTENER_PRODUCER_TOPIC, e.getMessage(), e);
+                logger.error("Publish message to kafka topic {} failed with an error: {}", topicForPublishing, e.getMessage(), e);
                 throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
             }
         }
-        logger.info("Messages published to kafka topic {}. count {}", LISTENER_PRODUCER_TOPIC, messages.size());
+        logger.info("Messages published to kafka topic {}. count {}", topicForPublishing, messages.size());
 
     }
 
