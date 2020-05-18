@@ -3,6 +3,7 @@ package com.netflix.conductor.contribs.kafka;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
+import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
@@ -64,9 +65,10 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     }
 
     @Inject
-    public KafkaObservableQueue(final String queueName, final Configuration config, final Injector injector){
+    public KafkaObservableQueue(final String queueName, final Configuration config, final Injector injector) {
         this.queueName = queueName;  // Topic
-        this.kafkaMessageHandler = new KafkaMessageHandler(new ResourceHandler(injector));
+        this.kafkaMessageHandler = new KafkaMessageHandler(new ResourceHandler(injector, new JsonMapperProvider().get()),
+                new JsonMapperProvider().get());
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
         this.pollTimeoutInMs = config.getIntProperty("kafka.consumer.longPollTimeout", 1000);
         init(config);  // Init Kafka producer and consumer properties
