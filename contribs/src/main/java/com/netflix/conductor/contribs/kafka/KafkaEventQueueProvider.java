@@ -56,12 +56,13 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
      * @param injector Google Dependency Injector object that builds the graph of objects for applications
      */
     public void startKafkaListener(final Injector injector) {
-        final String topic = config.getProperty("kafka.topic", "");
-        if (topic.isEmpty()) {
-            logger.error("Configuration missing for Kafka topic.");
-            throw new IllegalArgumentException("Configuration missing for Kafka topic.");
+        final String consumerTopic = config.getProperty("kafka.consumer.listener.topic", "");
+        final String producerTopic = config.getProperty("kafka.producer.listener.topic", "");
+        if (consumerTopic.isEmpty() && producerTopic.isEmpty()) {
+            logger.error("Configuration missing for Kafka Consumer and/or Producer topics.");
+            throw new IllegalArgumentException("Configuration missing for Kafka Consumer and/or Producer topics.");
         }
-        final Thread kafkaListener = new Thread(new KafkaObservableQueue(topic, config, injector));
+        final Thread kafkaListener = new Thread(new KafkaObservableQueue(consumerTopic, producerTopic, config, injector));
         kafkaListener.setDaemon(true);
         kafkaListener.start();
         logger.info("Kafka Listener Started.");
