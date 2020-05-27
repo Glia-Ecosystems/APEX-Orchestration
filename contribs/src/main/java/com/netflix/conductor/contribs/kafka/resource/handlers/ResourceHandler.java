@@ -64,7 +64,7 @@ public class ResourceHandler {
             // Regex expression: (/.*)?
             // (): Capturing group - parenthesis means, capture text grouped together within parenthesis
             // /: Backslash - Look for backslash symbol
-            // .: Period - Match any character
+            // .: Period - Match any character, except line break
             // *: Asterisk - Match previous character zero or more times
             // ?: Question mark - Match previous zero or more times
             resourceMap.put(uri.value() + "(/.*)?", resource);
@@ -179,8 +179,8 @@ public class ResourceHandler {
         try {
             final Object resourceInstance = getResourceInstance(requestedResource.getResourceClass());
             final Object[] methodArguments = getMethodArguments(request, requestedMethod, requestedResource);
-            serviceResponse = callService(resourceInstance, requestedMethod.getMethod(), methodArguments);
-        } catch (final IllegalAccessException | IOException ex) {
+            serviceResponse = callMethod(resourceInstance, requestedMethod.getMethod(), methodArguments);
+        } catch (final IllegalAccessException | IOException | IllegalArgumentException ex) {
             String logError = "Error occurred while executing the request on the resource method. Error: " + ex + " Cause: " + ex.getCause();
             String clientResponseError = "Error occurred while executing the request on the resource method. Cause: " + ex.getCause();
             logger.error(logError);
@@ -190,7 +190,7 @@ public class ResourceHandler {
             String clientResponseError = "Error occurred while executing the request on the resource method. Cause: " + ex.getCause();
             logger.error(logError);
             response.setResponseErrorMessage(clientResponseError);
-            return processResponse(response, serviceResponse, true);
+            return processResponse(response, null, true);
         }
         return processResponse(response, serviceResponse, false);
     }
@@ -230,19 +230,18 @@ public class ResourceHandler {
      * @return List of the arguments for the requested method
      */
     private Object[] getMethodArguments(final RequestContainer requestContainer, final ResourceMethod resourceMethod,
-                                        final Resource requestedResource) throws IOException {
+                                        final Resource requestedResource) throws IOException, InvocationTargetException, IllegalAccessException {
         final List<MethodParameter> parameters = resourceMethod.getParameters();
         final Object[] arguments = new Object[parameters.size()];
         for (int i = 0; i < parameters.size(); i++) {
             final String parameterAnnotationType = parameters.get(i).getParameterAnnotationType().name();
             // Get arguments for path param annotated parameters
             if (parameterAnnotationType.equals("PATH")) {
-                arguments[i] = getPathParmValue(requestContainer.getResourceURI(), resourceMethod.getUri().value(),
+                arguments[i] = getPathParamValue(requestContainer.getResourceURI(), resourceMethod.getUri().value(),
                         parameters.get(i).getParameterName(), requestedResource.getPathURI().value());
                 // Get arguments for query param annotated parameters
             } else if (parameterAnnotationType.equals("QUERY")) {
-                arguments[i] = getQueryParmValue(requestContainer.getResourceURI(), parameters.get(i).getParameterName(),
-                        parameters.get(i).getParameterDefaultValue());
+                arguments[i] = getQueryParamValue(requestContainer.getResourceURI(), parameters.get(i));
             } else {
                 // Get arguments for entity parameters
                 arguments[i] = getEntityParamValue(parameters.get(i).getParameterType(), requestContainer.getEntity());
@@ -265,10 +264,10 @@ public class ResourceHandler {
      * @param resourceURI   URI of the requested resource
      * @return The argument for a PathParm annotated parameter
      */
-    private String getPathParmValue(final String requestedURI, final String methodURI, final String parameterName,
+    private String getPathParamValue(final String requestedURI, final String methodURI, final String parameterName,
                                     final String resourceURI) {
         final String uriOfInterest = requestedURI.replace(resourceURI, "");
-        final String[] uriSplit = uriOfInterest.split("/");
+        final String[] uriSplit = uriOfInterest.split("[/?]");
         final String[] methodURISplit = methodURI.split("/");
         for (int i = 0; i < methodURISplit.length; i++) {
             if (methodURISplit[i].equals("{" + parameterName + "}")) {
@@ -282,26 +281,52 @@ public class ResourceHandler {
      * Get the argument for a Query annotated parameter by parsing the URI sent by the client
      * example:
      * Requested resource: /workflow/{name}, @QueryParam("example")
-     * Client Request URI: /workflow/gliaecosystem&example=true
+     * Client Request URI: /workflow/gliaecosystem?example=true
      *
      * Argument retrieved for method: true
      *
      * @param requestedURI Requested URI by client
-     * @param parameterName Name of the parameter
-     * @param parameterDefaultValue Default value for query parameter if not provided with client request
      * @return The argument for a Query annotated parameter
      */
-    private String getQueryParmValue(final String requestedURI, final String parameterName, final String parameterDefaultValue){
-        if (requestedURI.contains("?") && requestedURI.contains(parameterName)) {
+    private Object getQueryParamValue(final String requestedURI, final MethodParameter methodParameter) throws InvocationTargetException, IllegalAccessException {
+        // Gets query parameter value (if given) from given uri and convert to required type
+        if (requestedURI.contains("?") && requestedURI.contains(methodParameter.getParameterName())) {
             final String uriQueries = requestedURI.substring(requestedURI.lastIndexOf('?') + 1);
             for (final String query : uriQueries.split("&")) {
                 final String[] parameter = query.split("=");
-                if (parameter[0].equals("version")) {
-                    return parameter[1];
+                if (parameter[0].equals(methodParameter.getParameterName())) {
+                    return convertQueryParam(parameter[1], methodParameter);
                 }
             }
         }
-        return parameterDefaultValue;
+        // Gets default query parameter value and convert to required type
+        return convertQueryParam(methodParameter.getParameterDefaultValue(), methodParameter);
+    }
+
+    /**
+     * Convert query parameter key/value pair from requested URI to its required
+     * type for the resource method
+     * @param parameterValue Value of the given query parameter
+     * @param methodParameter Method parameter object of the requested method
+     * @return Query Parameter converted to required type
+     * @throws InvocationTargetException Thrown to indicate an exception that occurred while method was being executed
+     * @throws IllegalAccessException    Thrown to indicate that this method is not allowed to invoke the  method
+     */
+    private Object convertQueryParam(String parameterValue, final MethodParameter methodParameter) throws InvocationTargetException, IllegalAccessException {
+        final Class<?> parameterClass = methodParameter.getParameterClass();
+        // Null is returned as an argument when a query parameter value is not provided in request
+        // and the resource do not have a default value for parameter
+        if (parameterValue == null) {
+            return null;
+        }else if (parameterClass == List.class) {
+            // Removes square brackets from list type query params, if exist
+            parameterValue = parameterValue.replaceAll("[\\[\\]]", "");
+            return Arrays.asList(parameterValue.split(","));
+        } else if (parameterClass == String.class) {
+            return parameterValue;
+        } else {
+            return callMethod(null, methodParameter.getQueryParamValueConverter(), parameterValue);
+        }
     }
 
     /**
@@ -344,21 +369,22 @@ public class ResourceHandler {
         try {
             return injector.getInstance(clazz);
         } catch (final ProvisionException ex) {
-            throw new ProvisionException("Instance of resource could not be loaded by injector", ex);
+            throw new ProvisionException("Instance of resource could not be loaded by injector", ex.getCause());
         }
     }
 
     /**
      * Invoke resource method
-     * @param resource Resource instance
-     * @param method Requested method of the resource
+     *
+     * @param resource   Resource instance
+     * @param method     Requested method of the resource
      * @param parameters List of the parameters needed for the method. Parameters is a varargs which allows for many
      *                   or none number of elements to be provided
      * @return Response from the method
      * @throws InvocationTargetException Thrown to indicate an exception that occurred while method was being executed
-     * @throws IllegalAccessException Thrown to indicate that this method is not allowed to invoke the  method
+     * @throws IllegalAccessException    Thrown to indicate that this method is not allowed to invoke the  method
      */
-    private Object callService(final Object resource, final Method method, final Object... parameters) throws InvocationTargetException, IllegalAccessException {
+    private Object callMethod(final Object resource, final Method method, final Object... parameters) throws InvocationTargetException, IllegalAccessException {
         return method.invoke(resource, parameters);
     }
 

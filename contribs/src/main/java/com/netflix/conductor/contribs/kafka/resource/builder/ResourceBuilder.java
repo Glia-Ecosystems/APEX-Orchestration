@@ -147,6 +147,7 @@ public class ResourceBuilder {
         ParameterAnnotationType parameterAnnotationType = null;
         String parameterName = null;
         String parameterDefaultValue = null;
+        Method queryParamValueConverter = null;
 
         for (final Annotation annotation : parameterAnnotations) {
             if (PathParam.class == annotation.annotationType()) {
@@ -157,6 +158,11 @@ public class ResourceBuilder {
                 parameterAnnotation = annotation;
                 parameterAnnotationType = ParameterAnnotationType.QUERY;
                 parameterName = ((QueryParam) annotation).value();
+                // Get value of method for converting query param from string type
+                // to required type for resource method
+                if (parameterClass != String.class && parameterClass != List.class) {
+                    queryParamValueConverter = getQueryParamStringValueOfMethod(parameterClass);
+                }
             } else if (DefaultValue.class == annotation.annotationType()) {
                 parameterDefaultValue = ((DefaultValue) annotation).value();
             }
@@ -165,6 +171,45 @@ public class ResourceBuilder {
             parameterAnnotationType = ParameterAnnotationType.ENTITY;
         }
         return new MethodParameter(parameterClass, parameterType, parameterAnnotation, parameterAnnotationType,
-                parameterDefaultValue, parameterName);
+                parameterDefaultValue, parameterName, queryParamValueConverter);
+    }
+
+    /**
+     * Get the string value method with respect to type
+     * @param parameterClass Class object of the parameter type
+     * @return Value of method for respective type class
+     */
+    private static Method getQueryParamStringValueOfMethod(final Class<?> parameterClass) {
+        // Creates a primitive type map to match type class with actual type
+        final Map<Class<?>, Class<?>> primitiveTypes = new WeakHashMap<>();
+        primitiveTypes.put(Boolean.TYPE, Boolean.class);
+        primitiveTypes.put(Integer.TYPE, Integer.class);
+        primitiveTypes.put(Long.TYPE, Long.class);
+
+        if (parameterClass.isPrimitive()) {
+            // If parameter class is not of actual type, get type from primitive map,
+            // then get value of method
+            return getValueOfMethod(primitiveTypes.get(parameterClass), parameterClass.getName());
+        } else {
+            return getValueOfMethod(parameterClass, parameterClass.getName());
+        }
+    }
+
+    /**
+     * Get the value of method for given class type for converting query params
+     * from string type to requested type of resource method
+     * @param queryParameter Required type for query parameter
+     * @param queryParameterName Name of the query parameter
+     * @return Value of method for respective type class
+     */
+    private static Method getValueOfMethod(final Class<?> queryParameter, final String queryParameterName) {
+        try {
+            return queryParameter.getDeclaredMethod("valueOf", String.class);
+        } catch (NoSuchMethodException ex) {
+            String error = "Error occurred while trying to get the valueOf method for query param class"
+                    + queryParameterName + ". Cause: " + ex.getCause();
+            throw new NoSuchMethodError(error);
+        }
+
     }
 }
