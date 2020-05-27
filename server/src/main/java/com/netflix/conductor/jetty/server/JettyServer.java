@@ -100,7 +100,7 @@ public class JettyServer implements Lifecycle {
         server = null;
     }
 
-
+    
     private static void createKitchenSink(int port) throws Exception {
         Client client = Client.create();
         ObjectMapper objectMapper = new JsonMapperProvider().get();
