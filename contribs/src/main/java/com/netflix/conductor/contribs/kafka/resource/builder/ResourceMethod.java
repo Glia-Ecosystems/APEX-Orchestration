@@ -78,22 +78,27 @@ public class ResourceMethod {
      * @return URI regex
      */
     private String createPatternURI(final String uri) {
-        // Regex expression: (/.*)?
-        // (): Capturing group - parenthesis means, capture text grouped together within parenthesis
+        // Regex expression: ([^/]+?)
+        // (): Capturing group - parenthesis means, capture text grouped together within parenthesis and extract substring
         // []: Bracket - Match any of the characters inside the bracket
-        // ^: Anchor - Means start of string, but inside of a bracket it means "not"
+        // ^: Anchor - Means start of string, but inside of a bracket it means match any character not in set
         // /: Backslash - Look for backslash symbol
-        // +: Plus - One or more
+        // \\: Escape character, matches any symbol following backslash
+        // +: Plus - Match one or more of the previous tokens
         // ?: Question mark - Match previous zero or more times
-        final String regexForBraces = "([^/]+?)";
+        // .: Period - Match any character, except line break
+        final String regexForPathParams = "([^/]+?)";
+        final String regexForQueryParams = "(\\?.*)?";
         // This  indicator is used to assist in parsing/building a raw URI to a regex URI
         boolean okayToProcess = true;
+        boolean regexAddedForBraces = false;
         final StringBuilder patternURI = new StringBuilder();
         for (int i  = 0; i < uri.length(); i++){
             final char c = uri.charAt(i);
             if (c == '{') {
-                patternURI.append(regexForBraces);
+                patternURI.append(regexForPathParams);
                 okayToProcess = false;
+                regexAddedForBraces = true;
             } else if  (c == '}') {
                 okayToProcess = true;
             }
@@ -101,7 +106,9 @@ public class ResourceMethod {
                 patternURI.append(c);
             }
         }
-        return patternURI.toString();
+        // If regexPattern not added for PathParam, then add regexPattern at the end of
+        // URI for QueryParam, for if a query param is given to URI
+        return regexAddedForBraces ? patternURI.toString() : patternURI.toString() + regexForQueryParams;
     }
 
     /**
@@ -119,16 +126,18 @@ public class ResourceMethod {
         private final ParameterAnnotationType parameterAnnotationType;
         private final String parameterDefaultValue;
         private final String parameterName;
+        private final Method queryParamValueConverter;
 
         public MethodParameter(final Class<?> parameterClass, final Type parameterType, final Annotation parameterAnnotation,
                                final ParameterAnnotationType parameterAnnotationType, final String parameterDefaultValue,
-                               final String parameterName) {
+                               final String parameterName, final Method queryParamValueConverter) {
             this.parameterClass = parameterClass;
             this.parameterType = parameterType;
             this.parameterAnnotation = parameterAnnotation;
             this.parameterAnnotationType = parameterAnnotationType;
             this.parameterDefaultValue = parameterDefaultValue;
             this.parameterName = parameterName;
+            this.queryParamValueConverter = queryParamValueConverter;
         }
 
         /**
@@ -163,6 +172,25 @@ public class ResourceMethod {
          */
         public Type getParameterType() {
             return parameterType;
+        }
+
+        /**
+         * Get the class object of the parameter
+         *
+         * @return Parameter class
+         */
+        public Class<?> getParameterClass() {
+            return parameterClass;
+        }
+
+        /**
+         * Get the value of method (if provided) for converting the query parameter
+         * from string to required type
+         *
+         * @return Type.valueOfMethod
+         */
+        public Method getQueryParamValueConverter() {
+            return queryParamValueConverter;
         }
     }
 }
