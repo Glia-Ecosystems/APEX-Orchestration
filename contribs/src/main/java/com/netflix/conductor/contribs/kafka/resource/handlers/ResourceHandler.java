@@ -105,6 +105,8 @@ public class ResourceHandler {
             + request.getResourceURI());
             return response;
         }
+        // Set the indicator for if a start a workflow was requested
+        response.setStartedAWorkflow(requestedService.getMethod().getName().equals("startWorkflow"));
         return executeRequest(request, response,requestedResource, requestedService);
     }
 
@@ -434,11 +436,11 @@ public class ResourceHandler {
          * @return Map of the field values of the class
          */
         public Map<String, Object> getRequestData() {
-            final Map<String, Object> resquestData = new HashMap<>();
-            resquestData.put("resourceURI", resourceURI);
-            resquestData.put("httpMethod", httpMethod);
-            resquestData.put("entity", entity);
-            return resquestData;
+            final Map<String, Object> requestData = new HashMap<>();
+            requestData.put("resourceURI", resourceURI);
+            requestData.put("httpMethod", httpMethod);
+            requestData.put("entity", entity);
+            return requestData;
         }
     }
 
@@ -453,6 +455,7 @@ public class ResourceHandler {
         private StatusType statusType;
         private String responseErrorMessage;
         private Object responseEntity;
+        private boolean startedAWorkflow;
 
         public ResponseContainer(final RequestContainer request) {
             this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
@@ -461,6 +464,7 @@ public class ResourceHandler {
             this.statusType = Status.NO_CONTENT;
             this.responseEntity = "";
             this.responseErrorMessage = "";
+            this.startedAWorkflow = false;
         }
 
         /**
@@ -507,10 +511,46 @@ public class ResourceHandler {
         /**
          * Set the status code of the response
          *
-         * @param status Status   code
+         * @param status Status code
          */
         public void setStatus(final int status) {
             this.status = status;
+        }
+
+        /**
+         * Get the status code of the response
+         *
+         * @return response current status code
+         */
+        public int getStatus() {
+            return status;
+        }
+
+        /**
+         * Set the indication of if a workflow was started during the request
+         *
+         * @param startedAWorkflow Indicator of if a workflow was started
+         */
+        public void setStartedAWorkflow(boolean startedAWorkflow) {
+            this.startedAWorkflow = startedAWorkflow;
+        }
+
+        /**
+         * Get the indication of if a workflow was started during the request
+         *
+         * @return Indicator of if a workflow was started
+         */
+        public boolean isStartedAWorkflow() {
+            return startedAWorkflow;
+        }
+
+        /**
+         * Get the entity of the response from Conductor
+         *
+         * @return response entity
+         */
+        public Object getResponseEntity() {
+            return responseEntity;
         }
 
         /**
