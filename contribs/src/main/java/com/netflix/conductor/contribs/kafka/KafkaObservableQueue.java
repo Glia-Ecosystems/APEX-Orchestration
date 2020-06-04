@@ -24,9 +24,12 @@ import org.slf4j.LoggerFactory;
 import rx.Observable;
 import rx.Observable.OnSubscribe;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -51,10 +54,11 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     private final String listenerProducerTopic;
     private final boolean listenerEnabled;
     private final int pollIntervalInMS;
-    private final int pollTimeoutInMs;
+    private final Duration pollTimeoutInMs;
     private KafkaProducer<String, String> producer;
     private KafkaConsumer<String, String> consumer;
     private final AtomicReference<Thread> readThread = new AtomicReference<>(); // May delete
+    private final ExecutorService threadPool;
     private KafkaMessageHandler kafkaMessageHandler;
 
 
@@ -68,10 +72,11 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     public KafkaObservableQueue(final String queueName, final Configuration config) {
         this.queueName = queueName;  // Topic
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
-        this.pollTimeoutInMs = config.getIntProperty("kafka.consumer.longPollTimeout", 1000);
+        this.pollTimeoutInMs = Duration.ofMillis(config.getIntProperty("kafka.consumer.longPollTimeout", 1000));
         this.listenerProducerTopic = "";
         this.listenerConsumerTopic = "";
         this.listenerEnabled = false;
+        this.threadPool = null;
         init(config);  // Init Kafka producer and consumer properties
     }
 
@@ -91,10 +96,11 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         this.kafkaMessageHandler = new KafkaMessageHandler(new ResourceHandler(injector, new JsonMapperProvider().get()),
                 new JsonMapperProvider().get());
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
-        this.pollTimeoutInMs = config.getIntProperty("kafka.consumer.longPollTimeout", 1000);
+        this.pollTimeoutInMs = Duration.ofMillis(config.getIntProperty("kafka.consumer.longPollTimeout", 1000));
         this.listenerConsumerTopic = consumerTopic;
         this.listenerProducerTopic = producerTopic;
         this.listenerEnabled = true;
+        this.threadPool = Executors.newFixedThreadPool(20);
         init(config);  // Init Kafka producer and consumer properties
     }
 
@@ -123,7 +129,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         }
         final Map<String, Object> configurationMap = config.getAll();
         if (Objects.isNull(configurationMap)) {
-            throw new RuntimeException("Configuration missing");
+            throw new NullPointerException("Configuration missing");
         }
         // Filter through configuration file to get the necessary properties for Kafka producer and consumer
         for (final Entry<String, Object> entry : configurationMap.entrySet()) {
@@ -163,7 +169,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
                 logger.info("KafkaObservableQueue initialized for {} topic", queueName);
             }
         } catch (final KafkaException ke) {
-            throw new RuntimeException("Kafka initialization failed.", ke);
+            throw new KafkaException("Kafka initialization failed.", ke.getCause());
         }
     }
 
@@ -178,7 +184,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         final List<String> keysNotFound = hasKeyAndValue(consumerProperties, mandatoryKeys);
         if (!keysNotFound.isEmpty()) {
             logger.error("Configuration missing for Kafka consumer. {}", keysNotFound);
-            throw new RuntimeException("Configuration missing for Kafka consumer." + keysNotFound.toString());
+            throw new IllegalStateException("Configuration missing for Kafka consumer." + keysNotFound.toString());
         }
     }
 
@@ -193,7 +199,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         final List<String> keysNotFound = hasKeyAndValue(producerProperties, mandatoryKeys);
         if (!keysNotFound.isEmpty()) {
             logger.error("Configuration missing for Kafka producer. {}", keysNotFound);
-            throw new RuntimeException("Configuration missing for Kafka producer." + keysNotFound.toString());
+            throw new IllegalStateException("Configuration missing for Kafka producer." + keysNotFound.toString());
         }
     }
 
@@ -427,11 +433,10 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         // Remove infinite loop
         while (true) {
             // Observable<Message> listener  = observe();
-            final List<Message> message = receiveMessages();
-            if (!message.isEmpty()) {
-                final List<Message> response = sendRequestMessage(message);
-                ack(message);
-                publish(response);
+            final List<Message> messages = receiveMessages();
+            if (!messages.isEmpty()) {
+                threadPool.execute(() ->processAndPublishRequestMessage(messages));
+                ack(messages);
             }
         }
     }
@@ -453,19 +458,17 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     }
 
     /**
-     * Send client requests to Conductor API
+     * Send client requests to Conductor API and publish response to client
      *
      * @param message Messages from Kafka topic
-     * @return Responses from the Conductor API
      */
-    public List<Message> sendRequestMessage(final List<Message> message) {
-        final List<Message> responseMessages = new ArrayList<>();
+    public void processAndPublishRequestMessage(final List<Message> message) {
         for (final Message msg : message) {
-            // Verify if this should be a info log or debug log
+            final List<Message> responseMessage = new ArrayList<>();
             logger.info("Received message: {}", msg.getPayload());
-            responseMessages.add(kafkaMessageHandler.processMessage(msg));
+            responseMessage.add(kafkaMessageHandler.processMessage(msg, this, threadPool));
+            publish(responseMessage);
         }
-        return responseMessages;
     }
 
     /**
@@ -477,11 +480,19 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
             listen();
         } catch (final Exception e) {
             logger.error("KafkaObservableQueue.listen(), exiting due to error! {}", e.getMessage());
-        }
-        try {
-            close();
-        } catch (final Exception e) {
-            logger.error("KafkaObservableQueue.close(), unable to complete kafka clean up! {}", e.getMessage());
+        }finally {
+            try {
+                // Try to shut down/ terminate all reserved threads in the thread pool
+                threadPool.shutdown();
+            } catch (final Exception e) {
+                logger.error("ThreadPool.shutdown(), unable to complete shutting down threadpool! {}", e.getMessage());
+            }
+            try {
+                // Try to disconnect all connections to kafka via a consumer or producer object
+                close();
+            } catch (final Exception e) {
+                logger.error("KafkaObservableQueue.close(), unable to complete kafka clean up! {}", e.getMessage());
+            }
         }
     }
 }
