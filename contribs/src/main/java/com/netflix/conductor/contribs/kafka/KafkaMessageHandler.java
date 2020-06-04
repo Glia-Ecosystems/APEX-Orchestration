@@ -3,12 +3,14 @@ package com.netflix.conductor.contribs.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.contribs.kafka.resource.WorkflowStatusMonitor;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler.ResponseContainer;
 import com.netflix.conductor.core.events.queue.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Class handles the process of filtering the Kafka message for the Conductor API and filtering
@@ -29,12 +31,14 @@ public class KafkaMessageHandler {
     }
 
     /**
-     * Main function used to filter the message received from kafka to send to the Conductor API. Also,
-     * this function will return the response from the Conductor API as a Message object to be sent via Kafka
+     * Main function used to filter the message received from kafka to send to the Conductor API and return
+     * the response from the Conductor API as a Message object to be sent via Kafka. Also,
+     * this function will start a workflow status monitor thread for updating the client via kafka
+     * of the status of the started workflow by the client
      * @param message Message object containing received message from Kafka
      * @return Message object of the response from Conductor API or any errors that may occur during the process
      */
-    public Message processMessage(final Message message){
+    public Message processMessage(final Message message, final KafkaObservableQueue kafka, final ExecutorService pool){
         final Map<String, ?> request = jsonStringToMap(message.getPayload());
         if (request == null) {
             final ResponseContainer responseContainer = new ResponseContainer();
@@ -54,8 +58,21 @@ public class KafkaMessageHandler {
         final String method = resourceHandler.verifyRequestedHTTPMethod((String) request.get("method"));
         final Object entity = request.get("request");
         final ResponseContainer responseContainer = resourceHandler.processRequest(path, method, entity);
-        return new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
+        Message response = new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
+
+        // If a workflow was started
+        if (responseContainer.isStartedAWorkflow() && responseContainer.getStatus() == 200){
+            String workflowId = (String) responseContainer.getResponseEntity();
+            if (!workflowId.equals("")) {
+                // Use a thread from the thread pool for monitoring workflow status
+                final Runnable workflowStatusMonitor = new WorkflowStatusMonitor(resourceHandler, objectMapper,
+                        kafka, workflowId);
+                pool.execute(workflowStatusMonitor);
+            }
+        }
+        return response;
     }
+
 
     /**
      * Verifies the payload from the message to verify that necessary information were provided for the Conductor API
@@ -96,7 +113,7 @@ public class KafkaMessageHandler {
     /**
      * Converts an Object to a Json String
      *
-     * @param response Object containing the message to be send back to the client
+     * @param response Object containing the message to be sent back to the client
      * @return Json string message
      */
     private String toJSONString(final Object response) {
