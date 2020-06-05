@@ -100,7 +100,7 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         this.listenerConsumerTopic = consumerTopic;
         this.listenerProducerTopic = producerTopic;
         this.listenerEnabled = true;
-        this.threadPool = Executors.newFixedThreadPool(20);
+        this.threadPool = Executors.newFixedThreadPool(config.getIntProperty("conductor.kafka.listener.thread.pool", 20));
         init(config);  // Init Kafka producer and consumer properties
     }
 
