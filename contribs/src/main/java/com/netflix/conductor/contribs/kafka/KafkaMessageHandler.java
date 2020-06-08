@@ -10,6 +10,7 @@ import com.netflix.conductor.core.events.queue.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -38,7 +39,8 @@ public class KafkaMessageHandler {
      * @param message Message object containing received message from Kafka
      * @return Message object of the response from Conductor API or any errors that may occur during the process
      */
-    public Message processMessage(final Message message, final KafkaObservableQueue kafka, final ExecutorService pool){
+    public Message processMessage(final Message message, final KafkaObservableQueue kafka, final ExecutorService pool,
+                                  final CountDownLatch countDownLatch){
         final Map<String, ?> request = jsonStringToMap(message.getPayload());
         if (request == null) {
             final ResponseContainer responseContainer = new ResponseContainer();
@@ -60,14 +62,12 @@ public class KafkaMessageHandler {
         final ResponseContainer responseContainer = resourceHandler.processRequest(path, method, entity);
         Message response = new Message(message.getId(), toJSONString(responseContainer.getResponseData()), "");
 
-        // If a workflow was started
+        // If a workflow was started, create a separate thread to monitor and update the client via kafka of the workflow status
         if (responseContainer.isStartedAWorkflow() && responseContainer.getStatus() == 200){
             String workflowId = (String) responseContainer.getResponseEntity();
             if (!workflowId.equals("")) {
                 // Use a thread from the thread pool for monitoring workflow status
-                final Runnable workflowStatusMonitor = new WorkflowStatusMonitor(resourceHandler, objectMapper,
-                        kafka, workflowId);
-                pool.execute(workflowStatusMonitor);
+                pool.execute(new WorkflowStatusMonitor(resourceHandler, objectMapper, kafka, workflowId, countDownLatch));
             }
         }
         return response;

@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Monitors and updates the client via kafka the status of the workflow until
@@ -27,14 +28,16 @@ public class WorkflowStatusMonitor implements Runnable {
     private final KafkaObservableQueue kafka;
     private final String workflowID;
     private Object currentStatus;
+    private final CountDownLatch latch;
 
     public WorkflowStatusMonitor(final ResourceHandler resourceHandler, final ObjectMapper objectMapper,
-                                 final KafkaObservableQueue kafka, final String workflowID) {
+                                 final KafkaObservableQueue kafka, final String workflowID, final CountDownLatch latch) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
         this.kafka = kafka;
         this.workflowID = workflowID;
         this.currentStatus = "";
+        this.latch = latch;
     }
 
     /**
@@ -53,12 +56,12 @@ public class WorkflowStatusMonitor implements Runnable {
     private void monitor() {
         boolean completed = false;
         while (!completed) {
-            pollingInterval();
             ResponseContainer responseContainer = requestWorkflowStatus();
             Map<String, Object> workflow = objectToMap(responseContainer.getResponseEntity());
             Object workflowStatus = workflow.get("status");
             clientUpdateVerifier(responseContainer, workflowStatus);
             completed = (workflowStatus == "COMPLETED") || (workflowStatus == "TERMINATED");
+            pollingInterval();
         }
     }
 
@@ -138,6 +141,8 @@ public class WorkflowStatusMonitor implements Runnable {
     @Override
     public void run() {
         try {
+            // Wait until the workflow id is sent to the client first
+            latch.await();
             monitor();
         } catch (final Exception e) {
             logger.error("WorkflowStatusMonitor.monitor(), exiting due to error! {}", e.getMessage());
