@@ -432,14 +432,9 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
             // Observable<Message> listener  = observe();
             final List<Message> messages = receiveMessages();
             if (!messages.isEmpty()) {
-                int processedMessages = 0;
-                for (final Message msg : messages) {
-                    threadPool.execute(() -> processAndPublishRequestMessage(msg));
-                    processedMessages++; }
+                messages.forEach(msg -> threadPool.execute(() -> processAndPublishRequestMessage(msg)));
                 // Acknowledge messages received and processed upon completion
-                if (processedMessages == messages.size()){
-                    ack(messages);
-                }
+                ack(messages);
             }
         }
     }
