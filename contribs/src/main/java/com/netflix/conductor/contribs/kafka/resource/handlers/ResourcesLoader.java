@@ -187,9 +187,13 @@ public class ResourcesLoader {
         /**
          * Load an instance of the class specified by the given class name
          *
+         * Added a suppressed warning because a Type safety: Unchecked cast error occur when
+         * casting Class.forName return type Class<?> to  Class<T>. I believe the cast
+         * is needed because the class type reference matters
          * @param className The name of the class to be loaded
          * @return An instance of the requested class to be loaded
          */
+        @SuppressWarnings("unchecked")
         private <T> Class<T> loadResourceClass(final String className) {
             try {
                 return (Class<T>) Class.forName(className, false, classloader);
