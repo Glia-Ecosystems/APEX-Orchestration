@@ -1,17 +1,14 @@
 /*
  * Copyright 2019 Netflix, Inc.
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 package com.netflix.conductor.service;
 
@@ -19,7 +16,7 @@ import static com.netflix.conductor.utility.TestUtils.getConstraintViolationMess
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,13 +30,14 @@ import com.netflix.conductor.common.metadata.events.EventHandler;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.config.ValidationModule;
 import com.netflix.conductor.core.events.EventQueues;
 import com.netflix.conductor.core.execution.ApplicationException;
+import com.netflix.conductor.dao.EventHandlerDAO;
 import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.conductor.interceptors.ServiceInterceptor;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -54,13 +52,18 @@ public class MetadataServiceTest{
     private MetadataServiceImpl metadataService;
 
     private MetadataDAO metadataDAO;
+    private EventHandlerDAO eventHandlerDAO;
 
     private EventQueues eventQueues;
+    private Configuration configuration;
 
     @Before
     public void before() {
         metadataDAO = Mockito.mock(MetadataDAO.class);
+        eventHandlerDAO = Mockito.mock(EventHandlerDAO.class);
         eventQueues = Mockito.mock(EventQueues.class);
+        configuration = Mockito.mock(Configuration.class);
+        when(configuration.isOwnerEmailMandatory()).thenReturn(true);
 
         Injector injector =
                 Guice.createInjector(
@@ -69,7 +72,9 @@ public class MetadataServiceTest{
                             protected void configure() {
 
                                 bind(MetadataDAO.class).toInstance(metadataDAO);
+                                bind(EventHandlerDAO.class).toInstance(eventHandlerDAO);
                                 bind(EventQueues.class).toInstance(eventQueues);
+                                bind(Configuration.class).toInstance(configuration);
 
                                 install(new ValidationModule());
                                 bindInterceptor(
@@ -97,6 +102,7 @@ public class MetadataServiceTest{
     @Test(expected = ConstraintViolationException.class)
     public void testRegisterTaskDefNull() {
         try{
+            //noinspection ConstantConditions
             metadataService.registerTaskDef(null);
         } catch (ConstraintViolationException ex) {
             assertEquals(1, ex.getConstraintViolations().size());
@@ -114,7 +120,7 @@ public class MetadataServiceTest{
             taskDef.setName("somename");
             taskDef.setOwnerEmail("sample@test.com");
             taskDef.setResponseTimeoutSeconds(0);//wrong
-            metadataService.registerTaskDef(Arrays.asList(taskDef));
+            metadataService.registerTaskDef(Collections.singletonList(taskDef));
         } catch (ConstraintViolationException ex) {
             assertEquals(1, ex.getConstraintViolations().size());
             Set<String> messages = getConstraintViolationMessages(ex.getConstraintViolations());
@@ -142,6 +148,7 @@ public class MetadataServiceTest{
     @Test(expected = ConstraintViolationException.class)
     public void testUpdateTaskDefNull() {
         try{
+            //noinspection ConstantConditions
             metadataService.updateTaskDef(null);
         } catch (ConstraintViolationException ex) {
             assertEquals(1, ex.getConstraintViolations().size());
@@ -184,6 +191,7 @@ public class MetadataServiceTest{
     public void testUpdateWorkflowDefNull() {
         try{
             List<WorkflowDef> workflowDefList = null;
+            //noinspection ConstantConditions
             metadataService.updateWorkflowDef(workflowDefList);
         } catch (ConstraintViolationException ex) {
             assertEquals(1, ex.getConstraintViolations().size());
@@ -256,7 +264,7 @@ public class MetadataServiceTest{
         workflowDef.setTasks(tasks);
         when(metadataDAO.getTaskDef(any())).thenReturn(new TaskDef());
         metadataService.updateWorkflowDef(Collections.singletonList(workflowDef));
-        verify(metadataDAO, times(1)).update(workflowDef);
+        verify(metadataDAO, times(1)).updateWorkflowDef(workflowDef);
     }
 
     @Test(expected = ConstraintViolationException.class)
@@ -307,7 +315,7 @@ public class MetadataServiceTest{
         workflowDef.setTasks(tasks);
         when(metadataDAO.getTaskDef(any())).thenReturn(new TaskDef());
         metadataService.registerWorkflowDef(workflowDef);
-        verify(metadataDAO, times(1)).create(workflowDef);
+        verify(metadataDAO, times(1)).createWorkflowDef(workflowDef);
         assertEquals(2, workflowDef.getSchemaVersion());
     }
 
@@ -334,6 +342,7 @@ public class MetadataServiceTest{
     @Test(expected = ConstraintViolationException.class)
     public void testValidateEventNull() {
         try{
+            //noinspection ConstantConditions
             metadataService.addEventHandler(null);
         } catch (ConstraintViolationException ex) {
             assertEquals(1, ex.getConstraintViolations().size());
@@ -359,5 +368,4 @@ public class MetadataServiceTest{
         }
         fail("metadataService.addEventHandler did not throw ConstraintViolationException !");
     }
-
 }

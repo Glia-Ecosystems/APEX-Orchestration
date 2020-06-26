@@ -27,10 +27,7 @@ import rx.Observable.OnSubscribe;
 import java.time.Duration;
 import java.util.*;
 import java.util.Map.Entry;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -428,14 +425,15 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     public void listen() {
         logger.info("Kafka Listener is now waiting for server to start");
         sleepThread(); // This allows the Kafka thread to run once the server is started
-        logger.info("Consuming messages from topic {}. ", queueName);
+        logger.info("Consuming messages from topic {}. ", listenerConsumerTopic);
         readThread.set(Thread.currentThread());
         // Remove infinite loop
         while (true) {
             // Observable<Message> listener  = observe();
             final List<Message> messages = receiveMessages();
             if (!messages.isEmpty()) {
-                threadPool.execute(() ->processAndPublishRequestMessage(messages));
+                messages.forEach(msg -> threadPool.execute(() -> processAndPublishRequestMessage(msg)));
+                // Acknowledge messages received and processed upon completion
                 ack(messages);
             }
         }
@@ -462,13 +460,17 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
      *
      * @param message Messages from Kafka topic
      */
-    public void processAndPublishRequestMessage(final List<Message> message) {
-        for (final Message msg : message) {
-            final List<Message> responseMessage = new ArrayList<>();
-            logger.info("Received message: {}", msg.getPayload());
-            responseMessage.add(kafkaMessageHandler.processMessage(msg, this, threadPool));
-            publish(responseMessage);
-        }
+    public void processAndPublishRequestMessage(final Message message) {
+        final List<Message> responseMessage = new ArrayList<>();
+        logger.info("Received and processing message: {}", message.getPayload());
+        // A synchronization aid that allows one or more threads to wait upon the
+        // completion of another thread via a countdown indicator
+        // Used to allow the return of the workflow id, if a startWorkflow was
+        // requested before the results of the workflow status.
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        responseMessage.add(kafkaMessageHandler.processMessage(message, this, threadPool, countDownLatch));
+        publish(responseMessage);
+        countDownLatch.countDown();
     }
 
     /**

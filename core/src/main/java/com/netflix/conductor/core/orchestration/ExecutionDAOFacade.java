@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Netflix, Inc.
+ * Copyright 2020 Netflix, Inc.
  * <p>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -11,6 +11,8 @@
  * specific language governing permissions and limitations under the License.
  */
 package com.netflix.conductor.core.orchestration;
+
+import static com.netflix.conductor.core.execution.WorkflowExecutor.DECIDER_QUEUE;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.events.EventExecution;
@@ -26,8 +28,9 @@ import com.netflix.conductor.core.execution.ApplicationException;
 import com.netflix.conductor.core.execution.ApplicationException.Code;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.dao.IndexDAO;
+import com.netflix.conductor.dao.PollDataDAO;
 import com.netflix.conductor.dao.QueueDAO;
-import com.netflix.conductor.dao.RateLimitingDao;
+import com.netflix.conductor.dao.RateLimitingDAO;
 import com.netflix.conductor.metrics.Monitors;
 import java.io.IOException;
 import java.util.Collections;
@@ -42,10 +45,8 @@ import javax.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.netflix.conductor.core.execution.WorkflowExecutor.DECIDER_QUEUE;
-
 /**
- * Service that acts as a facade for accessing execution data from the {@link ExecutionDAO}, {@link RateLimitingDao} and {@link IndexDAO} storage layers
+ * Service that acts as a facade for accessing execution data from the {@link ExecutionDAO}, {@link RateLimitingDAO} and {@link IndexDAO} storage layers
  */
 @Singleton
 public class ExecutionDAOFacade {
@@ -57,23 +58,21 @@ public class ExecutionDAOFacade {
     private final ExecutionDAO executionDAO;
     private final QueueDAO queueDAO;
     private final IndexDAO indexDAO;
-    private final RateLimitingDao rateLimitingDao;
+    private final RateLimitingDAO rateLimitingDao;
+    private final PollDataDAO pollDataDAO;
     private final ObjectMapper objectMapper;
     private final Configuration config;
 
     private final ScheduledThreadPoolExecutor scheduledThreadPoolExecutor;
 
     @Inject
-    public ExecutionDAOFacade(ExecutionDAO executionDAO,
-                              QueueDAO queueDAO,
-                              IndexDAO indexDAO,
-                              RateLimitingDao rateLimitingDao,
-                              ObjectMapper objectMapper,
-                              Configuration config) {
+    public ExecutionDAOFacade(ExecutionDAO executionDAO, QueueDAO queueDAO, IndexDAO indexDAO,
+        RateLimitingDAO rateLimitingDao, PollDataDAO pollDataDAO, ObjectMapper objectMapper, Configuration config) {
         this.executionDAO = executionDAO;
         this.queueDAO = queueDAO;
         this.indexDAO = indexDAO;
         this.rateLimitingDao = rateLimitingDao;
+        this.pollDataDAO = pollDataDAO;
         this.objectMapper = objectMapper;
         this.config = config;
         this.scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(4,
@@ -216,22 +215,21 @@ public class ExecutionDAOFacade {
             workflow.setEndTime(System.currentTimeMillis());
         }
         executionDAO.updateWorkflow(workflow);
-        if (workflow.getStatus().isTerminal()) {
-            if (config.enableAsyncIndexing()) {
-                if (workflow.getEndTime() - workflow.getStartTime() < config.getAsyncUpdateShortRunningWorkflowDuration() * 1000) {
-                    final String workflowId = workflow.getWorkflowId();
-                    DelayWorkflowUpdate delayWorkflowUpdate = new DelayWorkflowUpdate(workflowId);
-                    LOGGER.debug("Delayed updating workflow: {} in the index by {} seconds", workflowId, config.getAsyncUpdateDelay());
-                    scheduledThreadPoolExecutor.schedule(delayWorkflowUpdate, config.getAsyncUpdateDelay(), TimeUnit.SECONDS);
-                    Monitors.recordWorkerQueueSize("delayQueue", scheduledThreadPoolExecutor.getQueue().size());
-                } else {
-                    indexDAO.asyncIndexWorkflow(workflow);
-                }
-                workflow.getTasks().forEach(indexDAO::asyncIndexTask);
+        if (config.enableAsyncIndexing()) {
+            if (workflow.getStatus().isTerminal() && workflow.getEndTime() - workflow.getStartTime() < config.getAsyncUpdateShortRunningWorkflowDuration() * 1000) {
+                final String workflowId = workflow.getWorkflowId();
+                DelayWorkflowUpdate delayWorkflowUpdate = new DelayWorkflowUpdate(workflowId);
+                LOGGER.debug("Delayed updating workflow: {} in the index by {} seconds", workflowId, config.getAsyncUpdateDelay());
+                scheduledThreadPoolExecutor.schedule(delayWorkflowUpdate, config.getAsyncUpdateDelay(), TimeUnit.SECONDS);
+                Monitors.recordWorkerQueueSize("delayQueue", scheduledThreadPoolExecutor.getQueue().size());
             } else {
-                indexDAO.indexWorkflow(workflow);
-                workflow.getTasks().forEach(indexDAO::indexTask);
+                indexDAO.asyncIndexWorkflow(workflow);
             }
+			if (workflow.getStatus().isTerminal()) {
+				workflow.getTasks().forEach(indexDAO::asyncIndexTask);
+			}
+        } else {
+            indexDAO.indexWorkflow(workflow);
         }
         return workflow.getWorkflowId();
     }
@@ -344,6 +342,15 @@ public class ExecutionDAOFacade {
                 }
             }
             executionDAO.updateTask(task);
+            /*
+             * Indexing a task for every update adds a lot of volume. That is ok but if async indexing
+             * is enabled and tasks are stored in memory until a block has completed, we would lose a lot
+             * of tasks on a system failure. So only index for each update if async indexing is not enabled.
+             * If it *is* enabled, tasks will be indexed only when a workflow is in terminal state.
+             */
+            if (!config.enableAsyncIndexing()) {
+            	indexDAO.indexTask(task);
+            }
         } catch (Exception e) {
             String errorMsg = String.format("Error updating task: %s in workflow: %s", task.getTaskId(), task.getWorkflowInstanceId());
             LOGGER.error(errorMsg, e);
@@ -360,15 +367,26 @@ public class ExecutionDAOFacade {
     }
 
     public List<PollData> getTaskPollData(String taskName) {
-        return executionDAO.getPollData(taskName);
+        return pollDataDAO.getPollData(taskName);
     }
 
     public PollData getTaskPollDataByDomain(String taskName, String domain) {
-        return executionDAO.getPollData(taskName, domain);
+        try {
+            return pollDataDAO.getPollData(taskName, domain);
+        } catch (Exception e) {
+            LOGGER.error("Error fetching pollData for task: '{}', domain: '{}'", taskName, domain, e);
+            return null;
+        }
     }
 
     public void updateTaskLastPoll(String taskName, String domain, String workerId) {
-        executionDAO.updateLastPoll(taskName, domain, workerId);
+        try {
+            pollDataDAO.updateLastPollData(taskName, domain, workerId);
+        } catch (Exception e) {
+            LOGGER.error("Error updating PollData for task: {} in domain: {} from worker: {}", taskName, domain,
+                workerId, e);
+            Monitors.error(this.getClass().getCanonicalName(), "updateTaskLastPoll");
+        }
     }
 
     /**
@@ -380,22 +398,26 @@ public class ExecutionDAOFacade {
      */
     public boolean addEventExecution(EventExecution eventExecution) {
         boolean added = executionDAO.addEventExecution(eventExecution);
+
         if (added) {
-            if (config.enableAsyncIndexing()) {
-                indexDAO.asyncAddEventExecution(eventExecution);
-            } else {
-                indexDAO.addEventExecution(eventExecution);
-            }
+            indexEventExecution(eventExecution);
         }
+
         return added;
     }
 
     public void updateEventExecution(EventExecution eventExecution) {
         executionDAO.updateEventExecution(eventExecution);
-        if (config.enableAsyncIndexing()) {
-            indexDAO.asyncAddEventExecution(eventExecution);
-        } else {
-            indexDAO.addEventExecution(eventExecution);
+        indexEventExecution(eventExecution);
+    }
+
+    private void indexEventExecution(EventExecution eventExecution) {
+        if (config.isEventExecutionIndexingEnabled()) {
+            if (config.enableAsyncIndexing()) {
+                indexDAO.asyncAddEventExecution(eventExecution);
+            } else {
+                indexDAO.addEventExecution(eventExecution);
+            }
         }
     }
 
