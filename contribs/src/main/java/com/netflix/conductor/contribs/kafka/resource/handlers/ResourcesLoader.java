@@ -50,7 +50,8 @@ public class ResourcesLoader {
         this.resourcesPath = resourcesPath;
         this.classes = new LinkedHashSet<>();
         this.classloader = classLoader;
-        this.annotations = Stream.of("L" + Path.class.getName().replaceAll("\\.", "/") + ";")
+        this.annotations = Stream.of("L" + Path.class.getName()
+                .replaceAll("\\.", "/") + ";")
                 .collect(Collectors.toCollection(HashSet::new));
         this.classVisitor = new AnnotatedClassesVisitor();
     }
