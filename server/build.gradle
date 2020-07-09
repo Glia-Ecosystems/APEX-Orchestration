@@ -30,6 +30,7 @@ dependencies {
     compile project(':conductor-cassandra-persistence')
     compile project(':conductor-contribs')
     compile project(':conductor-es5-persistence')
+    //compile project(':conductor-es6-persistence')
     compile project(':conductor-grpc-server')
     compile project(':conductor-zookeeper-lock')
     compile project(':conductor-redis-lock')
@@ -48,9 +49,13 @@ dependencies {
 
     //Swagger
     compile "io.swagger:swagger-jersey-jaxrs:${revSwagger}"
+    compile('javax.xml.bind:jaxb-api:2.3.0')
+    compile('javax.activation:activation:1.1')
+    compile('org.glassfish.jaxb:jaxb-runtime:2.3.0')
 }
 
 shadowJar {
+    zip64 true
     mergeServiceFiles()
     configurations = [project.configurations.compile]
     manifest {

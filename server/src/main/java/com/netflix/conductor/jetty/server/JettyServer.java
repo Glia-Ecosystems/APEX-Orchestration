@@ -31,9 +31,8 @@ import org.eclipse.jetty.jmx.MBeanContainer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.slf4j.Logger;
+
 import org.slf4j.LoggerFactory;
-
-
 import static java.lang.Boolean.getBoolean;
 import static java.lang.management.ManagementFactory.getPlatformMBeanServer;
 import static org.eclipse.jetty.util.log.Log.getLog;
@@ -92,6 +91,7 @@ public class JettyServer implements Lifecycle {
 
     }
 
+    @Override
     public synchronized void stop() throws Exception {
         if (server == null) {
             throw new IllegalStateException("Server is not running.  call #start() method to start the server");
@@ -100,16 +100,22 @@ public class JettyServer implements Lifecycle {
         server = null;
     }
 
-
+    
     private static void createKitchenSink(int port) throws Exception {
         Client client = Client.create();
         ObjectMapper objectMapper = new JsonMapperProvider().get();
 
         List<TaskDef> taskDefs = new LinkedList<>();
+        TaskDef taskDef;
         for (int i = 0; i < 40; i++) {
-            taskDefs.add(new TaskDef("task_" + i, "task_" + i, 1, 0));
+            taskDef = new TaskDef("task_" + i, "task_" + i, 1, 0);
+            taskDef.setOwnerEmail("example@email.com");
+            taskDefs.add(taskDef);
         }
-        taskDefs.add(new TaskDef("search_elasticsearch", "search_elasticsearch", 1, 0));
+
+        taskDef = new TaskDef("search_elasticsearch", "search_elasticsearch", 1, 0);
+        taskDef.setOwnerEmail("example@email.com");
+        taskDefs.add(taskDef);
 
         client.resource("http://localhost:" + port + "/api/metadata/taskdefs").type(MediaType.APPLICATION_JSON).post(objectMapper.writeValueAsString(taskDefs));
 

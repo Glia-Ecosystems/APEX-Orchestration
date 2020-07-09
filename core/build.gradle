@@ -14,7 +14,10 @@ dependencies {
     compile "org.apache.commons:commons-lang3:${revCommonsLang3}"
     compile "com.spotify:completable-futures:${revSpotifyCompletableFutures}"
     compile "com.amazonaws:aws-java-sdk-s3:${revAwsSdk}"
-    compile "org.hibernate:hibernate-validator:${revHiberante}"
+    compile "org.apache.bval:bval-jsr:${revBval}"
+    compile "javax.validation:validation-api:${revValidationApi}"
+    compile "org.apache.kafka:kafka-clients:2.2.0"
+    //compile "org.hibernate:hibernate-validator:${revHiberante}"
     // Bean validation runtime dependencies
     compile "javax.el:javax.el-api:${revJavaElApi}"
     // https://mvnrepository.com/artifact/org.glassfish/javax.el
