@@ -51,6 +51,15 @@ public class WorkflowStatusMonitor implements Runnable {
     }
 
     /**
+     * Makes a request to conductor to retry the last failed task in the current running
+     * workflow
+     */
+    private void retryLastTask(){
+        String path = "/workflow/" + workflowID + "/retry";
+        resourceHandler.processRequest(path, "POST", "");
+    }
+
+    /**
      * Main method of the class for monitoring the lifecycle of a workflow
      */
     private void monitor() {
@@ -75,6 +84,10 @@ public class WorkflowStatusMonitor implements Runnable {
         if (!workflowStatus.equals(currentStatus)) {
             currentStatus = workflowStatus;
             updateClientOfWorkFlowStatus(responseContainer);
+            // Retry the last task in workflow for the client if a workflow status "FAILED" is received
+            if (workflowStatus == "FAILED") {
+                retryLastTask();
+            }
         }
     }
 
