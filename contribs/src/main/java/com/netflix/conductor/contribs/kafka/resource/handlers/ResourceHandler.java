@@ -9,6 +9,7 @@ import com.netflix.conductor.contribs.kafka.resource.builder.ResourceBuilder;
 import com.google.inject.Injector;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.MethodParameter;
+import com.netflix.conductor.contribs.kafka.resource.RequestContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,7 +80,7 @@ public class ResourceHandler {
      * @param entity     The argument to be sent to the resource service
      * @return Response from resource
      */
-    public ResponseContainer processRequest(final String path, final String httpMethod, final Object entity) {
+    public ResponseContainer processRequest(String path, String httpMethod, Object entity) {
         // Create a request and response container
         final RequestContainer request = new RequestContainer(path, httpMethod, entity);
         final ResponseContainer response = new ResponseContainer(request);
@@ -95,6 +96,41 @@ public class ResourceHandler {
         }
         // Remove the base URI and to get only the URI for the requested method/service of the resource
         final String methodUri = path.replace(requestedResource.getPathURI().value(), "");
+        // Get the requested method from the resource
+        final ResourceMethod requestedService = getRequestedService(request, requestedResource, methodUri);
+        // If the method can't be found send back a response that the method can not be found for given URI
+        if (requestedService == null){
+            response.setStatus(404);
+            response.setResponseEntity(Status.NOT_FOUND);
+            response.setResponseErrorMessage("Requested service of requested resource can not be found by given URI: "
+                    + request.getResourceURI());
+            return response;
+        }
+        // Set the indicator for if a start a workflow was requested
+        response.setStartedAWorkflow(requestedService.getMethod().getName().equals("startWorkflow"));
+        return executeRequest(request, response,requestedResource, requestedService);
+    }
+
+    /**
+     * Main function for processing client requests  to the  Conductor API
+     *
+     * @return Response from resource
+     */
+    public ResponseContainer processRequest(RequestContainer request) {
+        // Create a request and response container
+        final ResponseContainer response = new ResponseContainer(request);
+
+        // Get the requested resource from the resource map
+        final Resource requestedResource = getRequestedResource(request);
+        // If the resource can't be found send back a response that the resource can not be found for given URI
+        if (requestedResource == null) {
+            response.setStatus(404);
+            response.setResponseEntity(Status.NOT_FOUND);
+            response.setResponseErrorMessage("Resource for requested URI " + request.getResourceURI() + " can not be found");
+            return response;
+        }
+        // Remove the base URI and to get only the URI for the requested method/service of the resource
+        final String methodUri = request.getResourceURI().replace(requestedResource.getPathURI().value(), "");
         // Get the requested method from the resource
         final ResourceMethod requestedService = getRequestedService(request, requestedResource, methodUri);
         // If the method can't be found send back a response that the method can not be found for given URI
@@ -388,60 +424,6 @@ public class ResourceHandler {
      */
     private Object callMethod(final Object resource, final Method method, final Object... parameters) throws InvocationTargetException, IllegalAccessException {
         return method.invoke(resource, parameters);
-    }
-
-    /**
-     * Container object for the client request
-     */
-    private static class RequestContainer {
-
-        private final String resourceURI;
-        private final String httpMethod;
-        private final Object entity;
-
-        public RequestContainer(final String resourceURI, final String httpMethod, final Object entity) {
-            this.resourceURI = resourceURI;
-            this.httpMethod = httpMethod;
-            this.entity = entity;
-        }
-
-        /**
-         * Get the requested URI
-         * @return URI
-         */
-        public String getResourceURI() {
-            return resourceURI;
-        }
-
-        /**
-         * Get the requested HTTP method
-         * @return HTTP method
-         */
-        public String getHttpMethod() {
-            return httpMethod;
-        }
-
-        /**
-         * Get the entity for the request
-         *
-         * @return Entity
-         */
-        public Object getEntity() {
-            return entity;
-        }
-
-        /**
-         * Creates a map containing the field values of Request Container
-         *
-         * @return Map of the field values of the class
-         */
-        public Map<String, Object> getRequestData() {
-            final Map<String, Object> requestData = new HashMap<>();
-            requestData.put("resourceURI", resourceURI);
-            requestData.put("httpMethod", httpMethod);
-            requestData.put("entity", entity);
-            return requestData;
-        }
     }
 
     /**
