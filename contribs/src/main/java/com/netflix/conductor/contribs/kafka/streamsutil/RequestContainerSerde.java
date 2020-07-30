@@ -1,9 +1,9 @@
-package com.netflix.conductor.contribs.kafka.streams;
+package com.netflix.conductor.contribs.kafka.streamsutil;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.contribs.kafka.resource.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
@@ -21,6 +21,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
 
     private static final Logger logger = LoggerFactory.getLogger(RequestContainerSerde.class);
     private final ObjectMapper objectMapper;
+    private String errorMessage;
 
     public RequestContainerSerde (final ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -34,7 +35,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      */
     @Override
     public void configure(final Map<String, ?> configs, final boolean isKey) {
-
+        // This method is left empty until needed.
     }
 
     /**
@@ -43,7 +44,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      */
     @Override
     public void close() {
-
+        // This method is left empty until needed.
     }
 
     /**
@@ -63,13 +64,24 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
     public Deserializer<RequestContainer> deserializer() {
         return new Deserializer<RequestContainer>() {
             @Override
-            public void configure(final Map<String, ?> configs, final boolean isKey) { }
+            public void configure(final Map<String, ?> configs, final boolean isKey) {
+                // This method is left empty until needed.
+            }
 
             @Override
             public RequestContainer deserialize(final String topic, final byte[] dataRecord) {
+                errorMessage = "";
+                if (dataRecord == null){
+                    return null;
+                }
                 final Map<String, ?> request = jsonStringToMap(new String(dataRecord));
+                if (request == null){
+                    // Handle if jsonStringToMap have an error
+                    return null;
+                }
                 // Verifies client message for Conductor
                 if (requestMessageErrors(request)) {
+                    throw new NullPointerException(errorMessage);
                     // Add statement for returning errors to client via kafka streams.
                 }
                 // Get the necessary info from the request message for sending to the Conductor API
@@ -81,7 +93,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
 
             @Override
             public void close() {
-
+                // This method is left empty until needed.
             }
         };
     }
@@ -113,9 +125,11 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      */
     public boolean requestMessageErrors(final Map<String, ?> requestMessage){
         if (requestMessage.get("path") == null) {
+            errorMessage = "Conductor API request message sent via conductor contain missing/empty URI path";
             logger.error("Conductor API request message sent via conductor contain missing/empty URI path");
             return true;
         }else if (requestMessage.get("method") == null) {
+            errorMessage = "Conductor API request message sent via conductor contain missing/empty HTTP method";
             logger.error("Conductor API request message sent via conductor contain missing/empty HTTP method");
             return true;
         }
