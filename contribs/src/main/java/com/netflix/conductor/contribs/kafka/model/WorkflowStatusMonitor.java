@@ -1,11 +1,10 @@
-package com.netflix.conductor.contribs.kafka.resource;
+package com.netflix.conductor.contribs.kafka.model;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.contribs.kafka.KafkaObservableQueue;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
-import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler.ResponseContainer;
 import com.netflix.conductor.core.events.queue.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +46,8 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private ResponseContainer requestWorkflowStatus(){
         String path = "/workflow/" + workflowID;
-        return resourceHandler.processRequest(path, "GET", "");
+        //return resourceHandler.processRequest(path, "GET", "");
+        return null;
     }
 
     /**
@@ -56,7 +56,7 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private void retryLastTask(){
         String path = "/workflow/" + workflowID + "/retry";
-        resourceHandler.processRequest(path, "POST", "");
+        //resourceHandler.processRequest(path, "POST", "");
     }
 
     /**

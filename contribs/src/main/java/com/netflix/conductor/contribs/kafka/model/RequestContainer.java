@@ -1,4 +1,4 @@
-package com.netflix.conductor.contribs.kafka.resource;
+package com.netflix.conductor.contribs.kafka.model;
 
 import java.util.HashMap;
 import java.util.Map;

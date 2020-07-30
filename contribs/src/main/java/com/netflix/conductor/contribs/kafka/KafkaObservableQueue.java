@@ -2,9 +2,6 @@ package com.netflix.conductor.contribs.kafka;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.Inject;
-import com.google.inject.Injector;
-import com.netflix.conductor.common.utils.JsonMapperProvider;
-import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
@@ -28,7 +25,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -39,7 +35,7 @@ import java.util.stream.Collectors;
  *
  * @author Glia Ecosystems
  */
-public class KafkaObservableQueue implements ObservableQueue, Runnable {
+public class KafkaObservableQueue implements ObservableQueue {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaObservableQueue.class);
     private static final String QUEUE_TYPE = "kafka";
@@ -47,16 +43,10 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
     private static final String KAFKA_PRODUCER_PREFIX = "kafka.producer.";
     private static final String KAFKA_CONSUMER_PREFIX = "kafka.consumer.";
     private final String queueName;
-    private final String listenerConsumerTopic;
-    private final String listenerProducerTopic;
-    private final boolean listenerEnabled;
     private final int pollIntervalInMS;
     private final Duration pollTimeoutInMs;
     private KafkaProducer<String, String> producer;
     private KafkaConsumer<String, String> consumer;
-    private final AtomicReference<Thread> readThread = new AtomicReference<>(); // May delete
-    private final ExecutorService threadPool;
-    private KafkaMessageHandler kafkaMessageHandler;
 
 
     /**
@@ -70,42 +60,13 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         this.queueName = queueName;  // Topic
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
         this.pollTimeoutInMs = Duration.ofMillis(config.getIntProperty("kafka.consumer.longPollTimeout", 1000));
-        this.listenerProducerTopic = "";
-        this.listenerConsumerTopic = "";
-        this.listenerEnabled = false;
-        this.threadPool = null;
-        init(config);  // Init Kafka producer and consumer properties
-    }
-
-    /**
-     * Constructor of KafkaObservableQueue for a kafka listener object for consuming and processing client
-     * requests to Conductor API and publishing responses from Conductor API to client
-     *
-     * @param consumerTopic Topic for consuming messages
-     * @param producerTopic Topic for publishing messages
-     * @param config        Main configuration file for the Conductor application
-     * @param injector      Google Dependency Injector object that builds the graph of objects for applications
-     */
-    @Inject
-    public KafkaObservableQueue(final String consumerTopic, final String producerTopic,
-                                final Configuration config, final Injector injector) {
-        this.queueName = "";
-        this.kafkaMessageHandler = new KafkaMessageHandler(new ResourceHandler(injector, new JsonMapperProvider().get()),
-                new JsonMapperProvider().get());
-        this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
-        this.pollTimeoutInMs = Duration.ofMillis(config.getIntProperty("kafka.consumer.longPollTimeout", 1000));
-        this.listenerConsumerTopic = consumerTopic;
-        this.listenerProducerTopic = producerTopic;
-        this.listenerEnabled = true;
-        this.threadPool = Executors.newFixedThreadPool(config.getIntProperty("conductor.kafka.listener.thread.pool", 20));
         init(config);  // Init Kafka producer and consumer properties
     }
 
     /**
      * Initializes the kafka consumer and producer with the properties of prefix 'kafka.producer.', 'kafka.consumer.'
      * and 'kafka.' from the provided configuration. Queue name (Topic) is provided from the workflow if kafka is
-     * initialized in a event queue or provided from the configuraation if kafka is initialize for processing client
-     * requests to Conductor API. It is/should be assumed that the queue name provided is already configured in
+     * initialized in a event queue. It is/should be assumed that the queue name provided is already configured in
      * the kafka cluster. Fails if any mandatory configs are missing.
      *
      * @param config Main configuration file for the Conductor application
@@ -115,15 +76,10 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         final Properties producerProperties = new Properties();
         final Properties consumerProperties = new Properties();
         final String serverId = config.getServerId();
-        if (listenerEnabled) {
-            consumerProperties.put("group.id", listenerConsumerTopic + "_group");
-            consumerProperties.put("client.id", listenerConsumerTopic + "_consumer_" + serverId);
-            producerProperties.put("client.id", listenerProducerTopic + "_producer_" + serverId);
-        } else {
-            consumerProperties.put("group.id", queueName + "_group");
-            consumerProperties.put("client.id", queueName + "_consumer_" + serverId);
-            producerProperties.put("client.id", queueName + "_producer_" + serverId);
-        }
+        consumerProperties.put("group.id", queueName + "_group");
+        consumerProperties.put("client.id", queueName + "_consumer_" + serverId);
+        producerProperties.put("client.id", queueName + "_producer_" + serverId);
+
         final Map<String, Object> configurationMap = config.getAll();
         if (Objects.isNull(configurationMap)) {
             throw new NullPointerException("Configuration missing");
@@ -153,18 +109,10 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
             // Init Kafka producer and consumer
             producer = new KafkaProducer<>(producerProperties);
             consumer = new KafkaConsumer<>(consumerProperties);
-            // Assumption is that the consumer topic (queueName/listenerConsumerTopic) provided is already configured
-            // within the Kafka cluster.
+            // Assumption is that the consumer topic queueName provided is already configured within the Kafka cluster.
             // This is where Consumer subscribe to given Topic
-            if (listenerEnabled) {
-                consumer.subscribe(Collections.singletonList(listenerConsumerTopic));
-                logger.info("KafkaObservableQueue initialized. Listening to {} (consumer topic) for consuming and " +
-                                "processing client requests. Responses will be published to {} (producer topic)",
-                        listenerConsumerTopic, listenerProducerTopic);
-            } else {
-                consumer.subscribe(Collections.singletonList(queueName));
-                logger.info("KafkaObservableQueue initialized for {} topic", queueName);
-            }
+            consumer.subscribe(Collections.singletonList(queueName));
+            logger.info("KafkaObservableQueue initialized for {} topic", queueName);
         } catch (final KafkaException ke) {
             throw new KafkaException("Kafka initialization failed.", ke.getCause());
         }
@@ -282,12 +230,11 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
      */
     @VisibleForTesting()
     public void publishMessages(final List<Message> messages) {
-        String topicForPublishing = (listenerEnabled) ? listenerProducerTopic : queueName;
         if (messages == null || messages.isEmpty()) {
             return;
         }
         for (final Message message : messages) {
-            final ProducerRecord<String, String> record = new ProducerRecord<>(topicForPublishing, message.getId(),
+            final ProducerRecord<String, String> record = new ProducerRecord<>(queueName, message.getId(),
                     message.getPayload());
             final RecordMetadata metadata;
             try {
@@ -297,13 +244,13 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
                 logger.debug(producerLogging);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.error("Publish message to kafka topic {} failed with an error: {}", topicForPublishing, e.getMessage(), e);
+                logger.error("Publish message to kafka topic {} failed with an error: {}", queueName, e.getMessage(), e);
             } catch (final ExecutionException e) {
-                logger.error("Publish message to kafka topic {} failed with an error: {}", topicForPublishing, e.getMessage(), e);
+                logger.error("Publish message to kafka topic {} failed with an error: {}", queueName, e.getMessage(), e);
                 throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
             }
         }
-        logger.info("Messages published to kafka topic {}. count {}", topicForPublishing, messages.size());
+        logger.info("Messages published to kafka topic {}. count {}", queueName, messages.size());
 
     }
 
@@ -415,86 +362,6 @@ public class KafkaObservableQueue implements ObservableQueue, Runnable {
         if (consumer != null) {
             consumer.unsubscribe();
             consumer.close();
-        }
-    }
-
-    /**
-     * Executes the process of executing client requests to the Conductor API via
-     * Kafka
-     */
-    public void listen() {
-        logger.info("Kafka Listener is now waiting for server to start");
-        sleepThread(); // This allows the Kafka thread to run once the server is started
-        logger.info("Consuming messages from topic {}. ", listenerConsumerTopic);
-        readThread.set(Thread.currentThread());
-        // Remove infinite loop
-        while (true) {
-            // Observable<Message> listener  = observe();
-            final List<Message> messages = receiveMessages();
-            if (!messages.isEmpty()) {
-                messages.forEach(msg -> threadPool.execute(() -> processAndPublishRequestMessage(msg)));
-                // Acknowledge messages received and processed upon completion
-                ack(messages);
-            }
-        }
-    }
-
-    /**
-     * Execute a Thread sleep for the established time
-     */
-    private void sleepThread(){
-        // Thread.sleep function is executed so that a consumed message is not sent
-        // to Conductor before the server is started
-        try {
-            Thread.sleep(45000); // 45 seconds thread sleep
-        } catch (final InterruptedException e) {
-            // Restores the interrupt by the InterruptedException so that caller can see that
-            // interrupt has occurred.
-            Thread.currentThread().interrupt();
-            logger.error("Error occurred while trying to sleep Thread. {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Send client requests to Conductor API and publish response to client
-     *
-     * @param message Messages from Kafka topic
-     */
-    public void processAndPublishRequestMessage(final Message message) {
-        final List<Message> responseMessage = new ArrayList<>();
-        logger.info("Received and processing message: {}", message.getPayload());
-        // A synchronization aid that allows one or more threads to wait upon the
-        // completion of another thread via a countdown indicator
-        // Used to allow the return of the workflow id, if a startWorkflow was
-        // requested before the results of the workflow status.
-        CountDownLatch countDownLatch = new CountDownLatch(1);
-        responseMessage.add(kafkaMessageHandler.processMessage(message, this, threadPool, countDownLatch));
-        publish(responseMessage);
-        countDownLatch.countDown();
-    }
-
-    /**
-     * Creates a separate thread from the main thread for Kafka Listener
-     */
-    @Override
-    public void run() {
-        try {
-            listen();
-        } catch (final Exception e) {
-            logger.error("KafkaObservableQueue.listen(), exiting due to error! {}", e.getMessage());
-        }finally {
-            try {
-                // Try to shut down/ terminate all reserved threads in the thread pool
-                threadPool.shutdown();
-            } catch (final Exception e) {
-                logger.error("ThreadPool.shutdown(), unable to complete shutting down threadpool! {}", e.getMessage());
-            }
-            try {
-                // Try to disconnect all connections to kafka via a consumer or producer object
-                close();
-            } catch (final Exception e) {
-                logger.error("KafkaObservableQueue.close(), unable to complete kafka clean up! {}", e.getMessage());
-            }
         }
     }
 }

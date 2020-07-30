@@ -4,18 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.google.inject.Inject;
 import com.google.inject.ProvisionException;
+import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.builder.Resource;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceBuilder;
 import com.google.inject.Injector;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.MethodParameter;
-import com.netflix.conductor.contribs.kafka.resource.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response.Status;
-import javax.ws.rs.core.Response.StatusType;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -23,8 +23,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -70,45 +68,6 @@ public class ResourceHandler {
             // ?: Question mark - Match previous zero or more times
             resourceMap.put(uri.value() + "(/.*)?", resource);
         }
-    }
-
-    /**
-     * Main function for processing client requests  to the  Conductor API
-     *
-     * @param path       URI path of the requested resource
-     * @param httpMethod HTTP method to assist in identify the requested service from the resource
-     * @param entity     The argument to be sent to the resource service
-     * @return Response from resource
-     */
-    public ResponseContainer processRequest(String path, String httpMethod, Object entity) {
-        // Create a request and response container
-        final RequestContainer request = new RequestContainer(path, httpMethod, entity);
-        final ResponseContainer response = new ResponseContainer(request);
-
-        // Get the requested resource from the resource map
-        final Resource requestedResource = getRequestedResource(request);
-        // If the resource can't be found send back a response that the resource can not be found for given URI
-        if (requestedResource == null) {
-            response.setStatus(404);
-            response.setResponseEntity(Status.NOT_FOUND);
-            response.setResponseErrorMessage("Resource for requested URI " + request.getResourceURI() + " can not be found");
-            return response;
-        }
-        // Remove the base URI and to get only the URI for the requested method/service of the resource
-        final String methodUri = path.replace(requestedResource.getPathURI().value(), "");
-        // Get the requested method from the resource
-        final ResourceMethod requestedService = getRequestedService(request, requestedResource, methodUri);
-        // If the method can't be found send back a response that the method can not be found for given URI
-        if (requestedService == null){
-            response.setStatus(404);
-            response.setResponseEntity(Status.NOT_FOUND);
-            response.setResponseErrorMessage("Requested service of requested resource can not be found by given URI: "
-                    + request.getResourceURI());
-            return response;
-        }
-        // Set the indicator for if a start a workflow was requested
-        response.setStartedAWorkflow(requestedService.getMethod().getName().equals("startWorkflow"));
-        return executeRequest(request, response,requestedResource, requestedService);
     }
 
     /**
@@ -184,26 +143,6 @@ public class ResourceHandler {
     }
 
     /**
-     * Verifies the given URI is of correct syntax
-     *
-     * @param path Given URI from client request
-     * @return URI for requested resource
-     */
-    public String verifyRequestedURIPath(final String path) {
-        return path.startsWith("/") ? path : "/" + path;
-    }
-
-    /**
-     * Verifies the given HTTP method is capitalized
-     *
-     * @param httpMethod Given HTTP method from client request
-     * @return Upper Case HTTP method
-     */
-    public String verifyRequestedHTTPMethod(final String httpMethod) {
-        return httpMethod.toUpperCase();
-    }
-
-    /**
      * Executes clients on Conductor  API
      * @param request Contains all the needed information for processing the request
      * @param response Response object for sending all needed information about the response from the Conductor API
@@ -242,7 +181,7 @@ public class ResourceHandler {
      */
     private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response,
                                               final boolean invocationException) {
-        if ("".equals(responseContainer.responseErrorMessage)) {
+        if ("".equals(responseContainer.getResponseErrorMessage())) {
             // If no error message respond that everything went okay with process request
             responseContainer.setStatus(200);
             responseContainer.setStatusType(Status.OK);
@@ -424,132 +363,5 @@ public class ResourceHandler {
      */
     private Object callMethod(final Object resource, final Method method, final Object... parameters) throws InvocationTargetException, IllegalAccessException {
         return method.invoke(resource, parameters);
-    }
-
-    /**
-     * Container object for the Conductor API response
-     */
-    public static class ResponseContainer {
-
-        private final String dateTime;
-        private final Map<String, Object> request;
-        private int status;
-        private StatusType statusType;
-        private String responseErrorMessage;
-        private Object responseEntity;
-        private boolean startedAWorkflow;
-
-        public ResponseContainer(final RequestContainer request) {
-            this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
-            this.request = request.getRequestData();
-            this.status = 204;
-            this.statusType = Status.NO_CONTENT;
-            this.responseEntity = "";
-            this.responseErrorMessage = "";
-            this.startedAWorkflow = false;
-        }
-
-        /**
-         * This constructor is used for returning a ResponseContainer object when an error occurred before the
-         * client request was sent to the service
-         */
-        public ResponseContainer() {
-            this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
-            this.request = null;
-            this.status = 204;
-            this.statusType = Status.NO_CONTENT;
-            this.responseEntity = "";
-            this.responseErrorMessage = "";
-
-        }
-
-        /**
-         * Set the response from the resource method to the conatiner
-         *
-         * @param responseEntity The response from the service
-         */
-        public void setResponseEntity(final Object responseEntity) {
-            this.responseEntity = responseEntity;
-        }
-
-        /**
-         * Set the error message if an error have occurred
-         *
-         * @param responseErrorMessage Error message
-         */
-        public void setResponseErrorMessage(final String responseErrorMessage) {
-            this.responseErrorMessage = responseErrorMessage;
-        }
-
-        /**
-         * Set the status type of the response from the service
-         *
-         * @param statusType Response status enum
-         */
-        public void setStatusType(final StatusType statusType) {
-            this.statusType = statusType;
-        }
-
-        /**
-         * Set the status code of the response
-         *
-         * @param status Status code
-         */
-        public void setStatus(final int status) {
-            this.status = status;
-        }
-
-        /**
-         * Get the status code of the response
-         *
-         * @return response current status code
-         */
-        public int getStatus() {
-            return status;
-        }
-
-        /**
-         * Set the indication of if a workflow was started during the request
-         *
-         * @param startedAWorkflow Indicator of if a workflow was started
-         */
-        public void setStartedAWorkflow(boolean startedAWorkflow) {
-            this.startedAWorkflow = startedAWorkflow;
-        }
-
-        /**
-         * Get the indication of if a workflow was started during the request
-         *
-         * @return Indicator of if a workflow was started
-         */
-        public boolean isStartedAWorkflow() {
-            return startedAWorkflow;
-        }
-
-        /**
-         * Get the entity of the response from Conductor
-         *
-         * @return response entity
-         */
-        public Object getResponseEntity() {
-            return responseEntity;
-        }
-
-        /**
-         * Creates a map containing the field values of Response Container
-         *
-         * @return Map of the field values of the class
-         */
-        public Map<String, Object> getResponseData() {
-            final Map<String, Object> responseData = new HashMap<>();
-            responseData.put("dateTime", dateTime);
-            responseData.put("request", (request == null) ? "" : request);
-            responseData.put("status", status);
-            responseData.put("statusType", statusType);
-            responseData.put("responseEntity", (responseEntity == null) ? "" : responseEntity);
-            responseData.put("responseErrorMessage", responseErrorMessage);
-            return responseData;
-        }
-
     }
 }

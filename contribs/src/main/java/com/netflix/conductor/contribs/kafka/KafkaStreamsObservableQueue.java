@@ -3,9 +3,11 @@ package com.netflix.conductor.contribs.kafka;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.netflix.conductor.common.utils.JsonMapperProvider;
-import com.netflix.conductor.contribs.kafka.resource.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
-import com.netflix.conductor.contribs.kafka.streams.RequestContainerSerde;
+import com.netflix.conductor.contribs.kafka.streamsutil.RequestContainerSerde;
+import com.netflix.conductor.contribs.kafka.streamsutil.ResponseContainerSerde;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
@@ -29,6 +31,12 @@ import java.util.stream.Collectors;
  * from the configuration. It is assumed that the topics provided is already configured in
  * the kafka cluster.
  *
+ * Basic steps for kafka streams
+ * 1. Define the configurations
+ * 2. Create Serde instances, predefined or custom
+ * 3. Build the kafka streams processor topology
+ * 4. Create and start the KStream
+ *
  * @author Glia Ecosystems
  */
 public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
@@ -38,11 +46,13 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final String CLIENT_STORE = "client-store";
     private static final String SERVICES_STORE ="service-store";
     private static final String EVENT_STORE = "event-store";
-    private final Properties streamProperties;
+    private static final int workflowMonitorBranchIndex = 0;
+    private final Properties streamsProperties;
     private final String queueName;
     private final String apexRequestsTopic;
     private final String apexResponsesTopic;
     private final ResourceHandler resourceHandler;
+    private KafkaStreams builtStreams;
 
     /**
      * Constructor of the KafkaStreamsObservableQueue for using kafka streams processing
@@ -60,7 +70,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         this.apexRequestsTopic = requestTopic;
         this.apexResponsesTopic = responseTopic;
         this.resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
-        this.streamProperties = createStreamsConfig(configuration);
+        this.streamsProperties = createStreamsConfig(configuration);
     }
 
     /**
@@ -75,7 +85,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      */
     private Properties createStreamsConfig(final Configuration configuration) {
         // You must set the properties in the .properties files
-        final Properties streamsProperties = new Properties();
+        final Properties properties = new Properties();
 
         // Checks if configuration file is not null
         final Map<String, Object> configurationMap = configuration.getAll();
@@ -85,14 +95,14 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         // Filter through configuration file to get the necessary properties for Kafka Streams
         configurationMap.forEach((key, value) -> {
             if (key.startsWith(KAFKA_STREAMS_PREFIX)) {
-                streamsProperties.put(key.replaceAll(KAFKA_STREAMS_PREFIX, ""), value);
+                properties.put(key.replaceAll(KAFKA_STREAMS_PREFIX, ""), value);
             }
         });
         // apply default configs
-        applyConsumerDefaults(streamsProperties);
+        applyConsumerDefaults(properties);
         // Verifies properties
-        checkStreamsProperties(streamsProperties);
-        return streamsProperties;
+        checkStreamsProperties(properties);
+        return properties;
     }
 
     /**
@@ -109,12 +119,12 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     /**
      * Checks that the mandatory configurations are available for kafka streams
      *
-     * @param streamsProperties Properties object for providing the necessary properties to Kafka Streams
+     * @param properties Properties object for providing the necessary properties to Kafka Streams
      */
-    private void checkStreamsProperties(final Properties streamsProperties) {
+    private void checkStreamsProperties(final Properties properties) {
         final List<String> mandatoryKeys = Arrays.asList(StreamsConfig.APPLICATION_ID_CONFIG,
                                                          StreamsConfig.BOOTSTRAP_SERVERS_CONFIG);
-        final List<String> keysNotFound = hasKeyAndValue(streamsProperties, mandatoryKeys);
+        final List<String> keysNotFound = hasKeyAndValue(properties, mandatoryKeys);
         if (!keysNotFound.isEmpty()) {
             logger.error("Configuration missing for Kafka streams. {}", keysNotFound);
             throw new IllegalStateException("Configuration missing for Kafka streams." + keysNotFound.toString());
@@ -124,15 +134,24 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     /**
      * Validates whether the property has given keys.
      *
-     * @param streamProperties Properties object for providing the necessary properties to Kafka Streams
+     * @param properties Properties object for providing the necessary properties to Kafka Streams
      * @param keys             List of the names of mandatory kafka properties needed:
      *      *                                         [APPLICATION_ID_CONFIG, BOOTSTRAP_SERVERS_CONFIG,]
      * @return List of mandatory properties missing from the configuration file
      */
-    private List<String> hasKeyAndValue(final Properties streamProperties, final List<String> keys) {
+    private List<String> hasKeyAndValue(final Properties properties, final List<String> keys) {
         return keys.stream()
-                .filter(key -> !streamProperties.containsKey(key) || Objects.isNull(streamProperties.get(key)))
+                .filter(key -> !properties.containsKey(key) || Objects.isNull(properties.get(key)))
                 .collect(Collectors.toList());
+    }
+
+    private Topology buildRecoveryStreamTopology(){
+        // This function have not been implemented yet
+        logger.error("Called a function not implemented yet.");
+        // Restores the interrupt by the InterruptedException so that caller can see that
+        // interrupt has occurred.
+        Thread.currentThread().interrupt();
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -140,25 +159,57 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      *
      * @return A kafka streams topology for processing client requests
      */
-    private Topology buildRequestStreamTopology(){
+    private Topology buildRequestsProcessorStreamTopology(){
+        RequestContainerSerde requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+        ResponseContainerSerde responseContainerSerde = new ResponseContainerSerde();
         StreamsBuilder builder = new StreamsBuilder();
+        // Parent Node
+        // Source Node (Responsible for consuming the records from a given topic, that will be processed)
         KStream<String, RequestContainer> requestStream = builder.stream(apexRequestsTopic,
-                Consumed.with(Serdes.String(), new RequestContainerSerde(new JsonMapperProvider().get())));
+                Consumed.with(Serdes.String(), requestContainerSerde))
+                .peek((k, v) -> logger.info("Received record. Client: {} Request: {}", k, v));
+        // Child Node of Parent Node - Execute Request to Conductor API and receive response
+        KStream<String, ResponseContainer> executeStream = requestStream.mapValues(resourceHandler::processRequest);
+        // Sink Node - Send Response to client
+        executeStream.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         return builder.build();
     }
 
-    public void startStream(){
-        Topology requestTopology = buildRequestStreamTopology();
+    public void startStream() {
+        Topology requestTopology = buildRequestsProcessorStreamTopology();
         logger.debug("Requests Topology Description: {}", requestTopology.describe());
-        KafkaStreams streams = new KafkaStreams(requestTopology, streamProperties);
+        builtStreams = new KafkaStreams(requestTopology, streamsProperties);
         // here you should examine the throwable/exception and perform an appropriate action!
-        streams.setUncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
-            System.out.println(throwable);
-        });
+        builtStreams.setUncaughtExceptionHandler((Thread thread, Throwable throwable) ->
+            logger.error(String.valueOf(throwable)));
+        sleepThread();
+        logger.info("Starting Kafka Streams for processing client requests to Conductor API");
+        builtStreams.start();
+    }
+
+    /**
+     * Execute a Thread sleep for the established time
+     */
+    private void sleepThread(){
+        // Thread.sleep function is executed so that the kafka stream processing of requests are not sent
+        // to Conductor before the server is started
         try {
-            streams.start();
-        } finally {
-            streams.close();
+            Thread.sleep(45000); // 45 secs thread sleep
+        } catch (final InterruptedException e) {
+            // Restores the interrupt by the InterruptedException so that caller can see that
+            // interrupt has occurred.
+            Thread.currentThread().interrupt();
+            logger.error("Error occurred while trying to sleep Thread. {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Closing of connections to Kafka Streams
+     */
+    @Override
+    public void close() {
+        if (builtStreams != null) {
+            builtStreams.close();
         }
     }
 
@@ -269,6 +320,13 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
             startStream();
         } catch (final Exception e) {
             logger.error("KafkaStreamsObservableQueue.startStream(), exiting due to error! {}", e.getMessage());
+        } finally {
+            try {
+                // Try to disconnect all connections to kafka via a consumer or producer object
+                close();
+            } catch (final Exception e) {
+                logger.error("KafkaStreamsObservableQueue.close(), unable to complete kafka clean up! {}", e.getMessage());
+            }
         }
     }
 }
