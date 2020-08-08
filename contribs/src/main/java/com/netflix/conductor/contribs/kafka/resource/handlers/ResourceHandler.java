@@ -73,10 +73,11 @@ public class ResourceHandler {
     /**
      * Main function for processing client requests  to the  Conductor API
      *
+     * @param request Contains all the needed information for processing the request
      * @return Response from resource
      */
     public ResponseContainer processRequest(RequestContainer request) {
-        // Create a request and response container
+        // Create a response container
         final ResponseContainer response = new ResponseContainer(request);
 
         // Get the requested resource from the resource map
