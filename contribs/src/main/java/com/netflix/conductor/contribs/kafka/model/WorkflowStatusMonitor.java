@@ -3,9 +3,9 @@ package com.netflix.conductor.contribs.kafka.model;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.contribs.kafka.KafkaStreamsObservableQueue;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.events.queue.Message;
-import org.apache.kafka.streams.kstream.KStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,15 +23,18 @@ public class WorkflowStatusMonitor implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowStatusMonitor.class);
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
-    private final KStream<String, ResponseContainer> kafka;
+    private final KafkaStreamsObservableQueue kafka;
+    private final String clientID;
     private final String workflowID;
     private Object currentStatus;
 
     public WorkflowStatusMonitor(final ResourceHandler resourceHandler, final ObjectMapper objectMapper,
-                                 final KStream<String, ResponseContainer> kafkaStreams, final String workflowID) {
+                                 final KafkaStreamsObservableQueue kafkaStreams, final String clientID,
+                                 final String workflowID) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
         this.kafka = kafkaStreams;
+        this.clientID = clientID;
         this.workflowID = workflowID;
         this.currentStatus = "";
     }
@@ -94,8 +97,8 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
         List<Message> responseMessage = new ArrayList<>();
-        responseMessage.add(new Message(workflowID, jsonTOString(responseContainer.getResponseData()), ""));
-        //kafka.publish(responseMessage);
+        responseMessage.add(new Message(clientID, jsonTOString(responseContainer.getResponseData()), ""));
+        kafka.publish(responseMessage);
     }
 
     /**

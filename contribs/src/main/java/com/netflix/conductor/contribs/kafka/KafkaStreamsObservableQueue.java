@@ -1,10 +1,12 @@
 package com.netflix.conductor.contribs.kafka;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.WorkflowStatusMonitor;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsProductionExceptionHandler;
@@ -13,7 +15,12 @@ import com.netflix.conductor.contribs.kafka.streamsutil.ResponseContainerSerde;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
+import com.netflix.conductor.core.execution.ApplicationException;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -25,6 +32,9 @@ import org.slf4j.LoggerFactory;
 import rx.Observable;
 
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
@@ -44,15 +54,23 @@ import java.util.stream.Collectors;
 public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsObservableQueue.class);
     private static final String QUEUE_TYPE = "kafkaStreams";
+    private static final String KAFKA_PREFIX = "kafka.";
     private static final String KAFKA_STREAMS_PREFIX = "kafka.streams.";
+    private static final String KAFKA_PRODUCER_PREFIX = "kafka.producer.";
     private static final int EXECUTE_BRANCH = 0;
     private static final int ERROR_BRANCH = 1;
+    // Create custom Serde objects for processing records
+    RequestContainerSerde requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+    ResponseContainerSerde responseContainerSerde = new ResponseContainerSerde();
+    ObjectMapper objectMapper = new JsonMapperProvider().get();
     private final Properties streamsProperties;
     private final String queueName;
     private final String apexRequestsTopic;
     private final String apexResponsesTopic;
     private final ResourceHandler resourceHandler;
     private KafkaStreams builtStreams;
+    private KafkaProducer<String, String> producer;
+    private final ExecutorService threadPool;
 
     /**
      * Constructor of the KafkaStreamsObservableQueue for using kafka streams processing
@@ -70,7 +88,9 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         this.apexRequestsTopic = requestTopic;
         this.apexResponsesTopic = responseTopic;
         this.resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
+        this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.listener.thread.pool", 20));
         this.streamsProperties = createStreamsConfig(configuration);
+        initKafkaProducer(configuration);
     }
 
     /**
@@ -99,13 +119,39 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
             }
         });
         // apply default configs
-        applyConsumerDefaults(properties);
+        applyKafkaStreamsConsumerDefaults(properties);
         // apply exception handlers configs
-        setDeserializationExceptionHandler(properties);
-        setProductionExceptionHandler(properties);
+        setKafkaStreamsDeserializationExceptionHandler(properties);
+        setKafkaStreamsProductionExceptionHandler(properties);
         // Verifies properties
         checkStreamsProperties(properties);
         return properties;
+    }
+
+    /**
+     * Initializes the kafka  producer with the properties of prefix 'kafka.producer.' and 'kafka.' from the
+     * provided configuration. Fails if any mandatory configs are missing.
+     *
+     * @param configuration Main configuration file for the Conductor application
+     */
+    private void initKafkaProducer(final Configuration configuration) {
+        final Properties producerProperties = new Properties();
+
+        final Map<String, Object> configurationMap = configuration.getAll();
+        // Filter through configuration file to get the necessary properties for Kafka Streams
+        configurationMap.forEach((key, value) -> {
+            if (key.startsWith(KAFKA_PREFIX)) {
+                if (key.startsWith(KAFKA_PRODUCER_PREFIX)) {
+                    producerProperties.put(key.replaceAll(KAFKA_PRODUCER_PREFIX, ""), value);
+                } else {
+                    producerProperties.put(key.replaceAll(KAFKA_PREFIX, ""), value);
+                }
+            }
+        });
+        // Verifies properties
+        checkProducerProperties(producerProperties);
+        // Init Kafka producer
+        producer = new KafkaProducer<>(producerProperties);
     }
 
     /**
@@ -113,7 +159,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      *
      * @param streamsProperties  Properties object for providing the necessary properties to Kafka Streams
      */
-    private void applyConsumerDefaults(final Properties streamsProperties) {
+    private void applyKafkaStreamsConsumerDefaults(final Properties streamsProperties) {
         if (null == streamsProperties.getProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)) {
             streamsProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         }
@@ -135,11 +181,26 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     }
 
     /**
+     * Checks that the mandatory configurations are available for kafka producer.
+     *
+     * @param producerProperties Kafka Properties object for providing the necessary properties to Kafka Producer
+     */
+    private void checkProducerProperties(final Properties producerProperties) {
+        final List<String> mandatoryKeys = Arrays.asList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG);
+        final List<String> keysNotFound = hasKeyAndValue(producerProperties, mandatoryKeys);
+        if (!keysNotFound.isEmpty()) {
+            logger.error("Configuration missing for Kafka producer. {}", keysNotFound);
+            throw new IllegalStateException("Configuration missing for Kafka producer." + keysNotFound.toString());
+        }
+    }
+
+    /**
      * Set a custom deserialization exception handler in kafka streams config
      *
      * @param properties Properties object for providing the necessary properties to Kafka Streams
      */
-    private void setDeserializationExceptionHandler(final Properties properties){
+    private void setKafkaStreamsDeserializationExceptionHandler(final Properties properties){
         properties.put(StreamsConfig.DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG,
                 KafkaStreamsDeserializationExceptionHandler.class);
     }
@@ -149,7 +210,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      *
      * @param properties Properties object for providing the necessary properties to Kafka Streams
      */
-    private void setProductionExceptionHandler(final Properties properties){
+    private void setKafkaStreamsProductionExceptionHandler(final Properties properties){
         properties.put(StreamsConfig.DEFAULT_PRODUCTION_EXCEPTION_HANDLER_CLASS_CONFIG,
                 KafkaStreamsProductionExceptionHandler.class);
     }
@@ -175,9 +236,6 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      */
     private Topology buildStreamTopology(){
         logger.info("Building Kafka Streams Topology for handling requests and responses to/from Conductor");
-        // Create custom Serde objects for processing records
-        RequestContainerSerde requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
-        ResponseContainerSerde responseContainerSerde = new ResponseContainerSerde();
         // Build kafka streams topology
         StreamsBuilder builder = new StreamsBuilder();
         // Parent Node
@@ -202,6 +260,9 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         processedRequest.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Sink Node - Send Error to client
         processedError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedRequest.filter((clientId, response) -> response.isStartedAWorkflow())
+                 .foreach((client, response) -> threadPool.execute(new WorkflowStatusMonitor(resourceHandler, objectMapper,
+                         this, client, (String) response.getResponseEntity())));
         return builder.build();
     }
 
@@ -277,6 +338,36 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     }
 
     /**
+     * Publish the messages to the given topic.
+     *
+     * @param messages List of messages to be publish via Kafka Producer
+     */
+    public void publishMessages(final List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+        for (final Message message : messages) {
+            final ProducerRecord<String, String> record = new ProducerRecord<>(apexResponsesTopic, message.getId(),
+                    message.getPayload());
+            final RecordMetadata metadata;
+            try {
+                metadata = producer.send(record).get();
+                final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
+                        ", partition " + metadata.partition() + ", offset " + metadata.offset();
+                logger.debug(producerLogging);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
+            } catch (final ExecutionException e) {
+                logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
+                throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
+            }
+        }
+        logger.info("Messages published to kafka topic {}. count {}", apexResponsesTopic, messages.size());
+
+    }
+
+    /**
      * Provide RX Observable object for consuming messages from Kafka Consumer
      * @return Observable object
      */
@@ -340,12 +431,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      */
     @Override
     public void publish(final List<Message> messages) {
-        // This function have not been implemented yet
-        logger.error("Called a function not implemented yet.");
-        // Restores the interrupt by the InterruptedException so that caller can see that
-        // interrupt has occurred.
-        Thread.currentThread().interrupt();
-        throw new UnsupportedOperationException();
+        publishMessages(messages);
     }
 
     /**
