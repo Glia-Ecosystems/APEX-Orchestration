@@ -45,14 +45,14 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsObservableQueue.class);
     private static final String QUEUE_TYPE = "kafkaStreams";
     private static final String KAFKA_STREAMS_PREFIX = "kafka.streams.";
+    private static final int EXECUTE_BRANCH = 0;
+    private static final int ERROR_BRANCH = 1;
     private final Properties streamsProperties;
     private final String queueName;
     private final String apexRequestsTopic;
     private final String apexResponsesTopic;
     private final ResourceHandler resourceHandler;
     private KafkaStreams builtStreams;
-    private final int executeBranch = 0;
-    private final int errorBranch = 1;
 
     /**
      * Constructor of the KafkaStreamsObservableQueue for using kafka streams processing
@@ -195,21 +195,21 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         Predicate<String, RequestContainer> isError = (clientId, request) -> request.isDeserializationErrorOccurred();
         KStream<String, RequestContainer>[] executeDept = requestStream.branch(readyToProcess, isError);
         // Child Node - Execute Request to Conductor API and receive response
-        KStream<String, ResponseContainer> processedRequest = executeDept[executeBranch].mapValues(resourceHandler::processRequest);
+        KStream<String, ResponseContainer> processedRequest = executeDept[EXECUTE_BRANCH].mapValues(resourceHandler::processRequest);
         // Child Node - Process error
-        KStream<String, ResponseContainer> processedError = executeDept[errorBranch].mapValues(KafkaStreamsDeserializationExceptionHandler::processError);
+        KStream<String, ResponseContainer> processedError = executeDept[ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processError);
         // Sink Node - Send Response to client
         processedRequest.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Sink Node - Send Error to client
         processedError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        //processedRequest.filter((clientId, response) -> response.isStartedAWorkflow())
-        //        .foreach(WorkflowStatusMonitor::);
         return builder.build();
     }
 
     /**
+     * Create a KafkaStreams object containing the built topology and properties file
+     * for processing requests to the Conductor API via kafka streams.
      *
-     * @param streamsTopology
+     * @param streamsTopology A topology object containing the structure of the kafka streams
      */
     private void buildKafkaStreams(Topology streamsTopology) {
         builtStreams = new KafkaStreams(streamsTopology, streamsProperties);
@@ -248,17 +248,6 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         builtStreams.start();
         // Add shutdown hook to respond to SIGTERM and gracefully close the Streams application.
         Runtime.getRuntime().addShutdownHook(new Thread(builtStreams::close));
-        //try {
-        //    builtStreams.start();
-        //    Thread.sleep(80000);
-        //} catch (InterruptedException e) {
-        //    logger.info("Shutting down because of an error");
-        //    close();
-        //    System.exit(0);
-        //}
-        //logger.info("Shutting down now");
-        //close();
-        //System.exit(0);
     }
 
     /**

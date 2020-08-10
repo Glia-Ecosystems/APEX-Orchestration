@@ -118,6 +118,9 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @return URI for requested resource
      */
     public String verifyRequestedURIPath(final String path) {
+        if (path.isEmpty()){
+            return path;
+        }
         return path.startsWith("/") ? path : "/" + path;
     }
 

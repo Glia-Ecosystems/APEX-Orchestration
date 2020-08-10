@@ -3,16 +3,15 @@ package com.netflix.conductor.contribs.kafka.model;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.contribs.kafka.KafkaObservableQueue;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.events.queue.Message;
+import org.apache.kafka.streams.kstream.KStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Monitors and updates the client via kafka the status of the workflow until
@@ -24,19 +23,17 @@ public class WorkflowStatusMonitor implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowStatusMonitor.class);
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
-    private final KafkaObservableQueue kafka;
+    private final KStream<String, ResponseContainer> kafka;
     private final String workflowID;
     private Object currentStatus;
-    private final CountDownLatch latch;
 
     public WorkflowStatusMonitor(final ResourceHandler resourceHandler, final ObjectMapper objectMapper,
-                                 final KafkaObservableQueue kafka, final String workflowID, final CountDownLatch latch) {
+                                 final KStream<String, ResponseContainer> kafkaStreams, final String workflowID) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
-        this.kafka = kafka;
+        this.kafka = kafkaStreams;
         this.workflowID = workflowID;
         this.currentStatus = "";
-        this.latch = latch;
     }
 
     /**
@@ -46,8 +43,7 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private ResponseContainer requestWorkflowStatus(){
         String path = "/workflow/" + workflowID;
-        //return resourceHandler.processRequest(path, "GET", "");
-        return null;
+        return resourceHandler.processRequest(new RequestContainer(path, "GET", ""));
     }
 
     /**
@@ -56,7 +52,7 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private void retryLastTask(){
         String path = "/workflow/" + workflowID + "/retry";
-        //resourceHandler.processRequest(path, "POST", "");
+        resourceHandler.processRequest(new RequestContainer(path, "POST", ""));
     }
 
     /**
@@ -99,7 +95,7 @@ public class WorkflowStatusMonitor implements Runnable {
     private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
         List<Message> responseMessage = new ArrayList<>();
         responseMessage.add(new Message(workflowID, jsonTOString(responseContainer.getResponseData()), ""));
-        kafka.publish(responseMessage);
+        //kafka.publish(responseMessage);
     }
 
     /**
@@ -154,8 +150,6 @@ public class WorkflowStatusMonitor implements Runnable {
     @Override
     public void run() {
         try {
-            // Wait until the workflow id is sent to the client first
-            latch.await();
             monitor();
         } catch (final Exception e) {
             logger.error("WorkflowStatusMonitor.monitor(), exiting due to error! {}", e.getMessage());

@@ -62,7 +62,6 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
             logger.error("Configuration missing for Kafka Consumer and/or Producer topics.");
             throw new IllegalArgumentException("Configuration missing for Kafka Consumer and/or Producer topics.");
         }
-        //new KafkaStreamsObservableQueue(injector, config, consumerTopic, producerTopic).startStream();
         Thread kafkaListener = new Thread(new KafkaStreamsObservableQueue(injector, config, consumerTopic, producerTopic));
         kafkaListener.setDaemon(true);
         kafkaListener.start();

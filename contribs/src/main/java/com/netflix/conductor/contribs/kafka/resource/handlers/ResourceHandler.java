@@ -86,7 +86,7 @@ public class ResourceHandler {
         if (requestedResource == null) {
             response.setStatus(404);
             response.setResponseEntity(Status.NOT_FOUND);
-            response.setResponseErrorMessage("Resource for requested URI " + request.getResourceURI() + " can not be found");
+            response.setResponseErrorMessage("Resource for requested URI '" + request.getResourceURI() + "' can not be found");
             return response;
         }
         // Remove the base URI and to get only the URI for the requested method/service of the resource
