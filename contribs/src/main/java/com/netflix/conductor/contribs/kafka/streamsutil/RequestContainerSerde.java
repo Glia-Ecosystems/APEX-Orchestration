@@ -118,9 +118,6 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @return URI for requested resource
      */
     public String verifyRequestedURIPath(final String path) {
-        if (path.isEmpty()){
-            return path;
-        }
         return path.startsWith("/") ? path : "/" + path;
     }
 
@@ -140,11 +137,11 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @return Indicator of if the message contains all required information.
      */
     public boolean requestMessageErrors(final Map<String, ?> requestMessage){
-        if (requestMessage.get("path") == null) {
+        if (requestMessage.get("path") == null || requestMessage.get("path") == "") {
             errorMessage = "Conductor API request message sent via kafka contain missing/empty URI path";
             logger.error("Conductor API request message sent via kafka contain missing/empty URI path");
             return true;
-        }else if (requestMessage.get("method") == null) {
+        }else if (requestMessage.get("method") == null || requestMessage.get("method") == "") {
             errorMessage = "Conductor API request message sent via kafka contain missing/empty HTTP method";
             logger.error("Conductor API request message sent via kafka contain missing/empty HTTP method");
             return true;
