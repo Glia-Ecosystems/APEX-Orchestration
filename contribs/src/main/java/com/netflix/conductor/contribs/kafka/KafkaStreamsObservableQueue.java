@@ -60,9 +60,9 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final int EXECUTE_BRANCH = 0;
     private static final int ERROR_BRANCH = 1;
     // Create custom Serde objects for processing records
-    RequestContainerSerde requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
-    ResponseContainerSerde responseContainerSerde = new ResponseContainerSerde();
-    ObjectMapper objectMapper = new JsonMapperProvider().get();
+    private static final RequestContainerSerde requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+    private static final ResponseContainerSerde responseContainerSerde = new ResponseContainerSerde();
+    private final ObjectMapper objectMapper = new JsonMapperProvider().get();
     private final Properties streamsProperties;
     private final String queueName;
     private final String apexRequestsTopic;
