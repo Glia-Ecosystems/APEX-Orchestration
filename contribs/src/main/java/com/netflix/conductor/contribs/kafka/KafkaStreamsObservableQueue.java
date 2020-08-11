@@ -84,13 +84,14 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     @Inject
     public KafkaStreamsObservableQueue(final Injector injector, final Configuration configuration,
                                        final String requestTopic, final String responseTopic){
+        final Map<String, Object> configurationMap = getConfigurationMap(configuration);
         this.queueName = "";
         this.apexRequestsTopic = requestTopic;
         this.apexResponsesTopic = responseTopic;
         this.resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.listener.thread.pool", 20));
-        this.streamsProperties = createStreamsConfig(configuration);
-        initKafkaProducer(configuration);
+        this.streamsProperties = createStreamsConfig(configurationMap);
+        initKafkaProducer(configurationMap);
     }
 
     /**
@@ -100,18 +101,13 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      * processing client requests to Conductor API. It is/should be assumed that the topics provided are already
      * configured in the kafka cluster. Fails if any mandatory configs are missing.
      *
-     * @param configuration Main configuration file for the Conductor application
+     * @param configurationMap Map object of the configuration file for the Conductor application
      * @return Properties file for kafka streams configuration
      */
-    private Properties createStreamsConfig(final Configuration configuration) {
+    private Properties createStreamsConfig(final Map<String, Object> configurationMap) {
         // You must set the properties in the .properties files
         final Properties properties = new Properties();
 
-        // Checks if configuration file is not null
-        final Map<String, Object> configurationMap = configuration.getAll();
-        if (Objects.isNull(configurationMap)) {
-            throw new NullPointerException("Configuration missing");
-        }
         // Filter through configuration file to get the necessary properties for Kafka Streams
         configurationMap.forEach((key, value) -> {
             if (key.startsWith(KAFKA_STREAMS_PREFIX)) {
@@ -132,12 +128,11 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      * Initializes the kafka  producer with the properties of prefix 'kafka.producer.' and 'kafka.' from the
      * provided configuration. Fails if any mandatory configs are missing.
      *
-     * @param configuration Main configuration file for the Conductor application
+     * @param configurationMap Map object of the configuration file for the Conductor application
      */
-    private void initKafkaProducer(final Configuration configuration) {
+    private void initKafkaProducer(final Map<String, Object> configurationMap) {
         final Properties producerProperties = new Properties();
 
-        final Map<String, Object> configurationMap = configuration.getAll();
         // Filter through configuration file to get the necessary properties for Kafka Streams
         configurationMap.forEach((key, value) -> {
             if (key.startsWith(KAFKA_PREFIX)) {
@@ -227,6 +222,22 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         return keys.stream()
                 .filter(key -> !properties.containsKey(key) || Objects.isNull(properties.get(key)))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Create a configuration map of the given config file and make verify that thee config file
+     * is not null
+     *
+     * @param configuration Main configuration file for the Conductor application
+     * @return Map object of the configuration file
+     */
+    private Map<String, Object> getConfigurationMap(Configuration configuration){
+        final Map<String, Object> configurationMap = configuration.getAll();
+        // Checks if configuration file is not null
+        if (Objects.isNull(configurationMap)) {
+            throw new NullPointerException("Configuration missing");
+        }
+        return configurationMap;
     }
 
     /**
@@ -340,31 +351,26 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     /**
      * Publish the messages to the given topic.
      *
-     * @param messages List of messages to be publish via Kafka Producer
+     * @param key Key of the record to be publish
+     * @param value Value of the record to be publish
      */
-    public void publishMessages(final List<Message> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return;
+    public void publishMessage(final String key, final String value) {
+        final ProducerRecord<String, String> record = new ProducerRecord<>(apexResponsesTopic, key,
+                value);
+        final RecordMetadata metadata;
+        try {
+            metadata = producer.send(record).get();
+            final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
+                    ", partition " + metadata.partition() + ", offset " + metadata.offset();
+            logger.debug(producerLogging);
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
+        } catch (final ExecutionException e) {
+            logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
+            throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
         }
-        for (final Message message : messages) {
-            final ProducerRecord<String, String> record = new ProducerRecord<>(apexResponsesTopic, message.getId(),
-                    message.getPayload());
-            final RecordMetadata metadata;
-            try {
-                metadata = producer.send(record).get();
-                final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
-                        ", partition " + metadata.partition() + ", offset " + metadata.offset();
-                logger.debug(producerLogging);
-            } catch (final InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
-            } catch (final ExecutionException e) {
-                logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
-                throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
-            }
-        }
-        logger.info("Messages published to kafka topic {}. count {}", apexResponsesTopic, messages.size());
-
+        logger.info("Message published to kafka topic {}. key/client {}", apexResponsesTopic, key);
     }
 
     /**
@@ -431,7 +437,12 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      */
     @Override
     public void publish(final List<Message> messages) {
-        publishMessages(messages);
+        // This function have not been implemented yet
+        logger.error("Called a function not implemented yet.");
+        // Restores the interrupt by the InterruptedException so that caller can see that
+        // interrupt has occurred.
+        Thread.currentThread().interrupt();
+        throw new UnsupportedOperationException();
     }
 
     /**

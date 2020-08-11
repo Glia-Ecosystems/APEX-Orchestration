@@ -26,6 +26,12 @@ public class ResponseContainerSerde implements Serde<ResponseContainer> {
         // This method is left empty until needed.
     }
 
+    /**
+     * Provides an override implementation to serialize a Response Container
+     * object into a byte for publishing to Kafka
+     *
+     * @return Serialized RequestContainer object
+     */
     @Override
     public Serializer<ResponseContainer> serializer() {
         return new Serializer<ResponseContainer>() {
