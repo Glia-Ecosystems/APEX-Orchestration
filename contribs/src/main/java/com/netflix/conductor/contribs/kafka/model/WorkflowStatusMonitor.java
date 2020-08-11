@@ -1,16 +1,13 @@
 package com.netflix.conductor.contribs.kafka.model;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.netflix.conductor.contribs.kafka.KafkaStreamsObservableQueue;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
-import com.netflix.conductor.core.events.queue.Message;
-import org.apache.kafka.streams.kstream.KStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,17 +18,21 @@ import java.util.Map;
  */
 public class WorkflowStatusMonitor implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowStatusMonitor.class);
+    private static final Gson gson = new Gson();
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
-    private final KStream<String, ResponseContainer> kafka;
+    private final KafkaStreamsObservableQueue kafka;
+    private final String clientID;
     private final String workflowID;
     private Object currentStatus;
 
     public WorkflowStatusMonitor(final ResourceHandler resourceHandler, final ObjectMapper objectMapper,
-                                 final KStream<String, ResponseContainer> kafkaStreams, final String workflowID) {
+                                 final KafkaStreamsObservableQueue kafkaStreams, final String clientID,
+                                 final String workflowID) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
         this.kafka = kafkaStreams;
+        this.clientID = clientID;
         this.workflowID = workflowID;
         this.currentStatus = "";
     }
@@ -93,9 +94,7 @@ public class WorkflowStatusMonitor implements Runnable {
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      */
     private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
-        List<Message> responseMessage = new ArrayList<>();
-        responseMessage.add(new Message(workflowID, jsonTOString(responseContainer.getResponseData()), ""));
-        //kafka.publish(responseMessage);
+        kafka.publishMessage(clientID, gson.toJson(responseContainer.getResponseData()));
     }
 
     /**
@@ -106,26 +105,6 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private Map<String, Object> objectToMap(final Object object) {
         return objectMapper.convertValue(object, new TypeReference<Map<String, Object>>() {});
-    }
-
-    /**
-     * Converts an Object to a Json String
-     *
-     * @param response Object containing the message to be sent back to the client
-     * @return Json string message
-     */
-    private String jsonTOString(final Object response) {
-        final String responseMessage;
-        try {
-            responseMessage = objectMapper.writeValueAsString(response);
-        } catch (final JsonProcessingException ex) {
-            // Check if we want to throw this exception
-            String error = "Error converting response message to json. Error: " + ex.getMessage() + " Cause: "
-                    + ex.getCause();
-            logger.error(error);
-            throw new RuntimeException("Error converting response message to json", ex.getCause());
-        }
-        return responseMessage;
     }
 
     /**
