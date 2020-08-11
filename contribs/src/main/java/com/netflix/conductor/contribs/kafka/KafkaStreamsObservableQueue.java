@@ -231,7 +231,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      * @param configuration Main configuration file for the Conductor application
      * @return Map object of the configuration file
      */
-    private Map<String, Object> getConfigurationMap(Configuration configuration){
+    private Map<String, Object> getConfigurationMap(final Configuration configuration){
         final Map<String, Object> configurationMap = configuration.getAll();
         // Checks if configuration file is not null
         if (Objects.isNull(configurationMap)) {
