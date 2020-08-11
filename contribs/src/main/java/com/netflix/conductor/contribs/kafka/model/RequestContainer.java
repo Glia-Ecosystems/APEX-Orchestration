@@ -11,11 +11,16 @@ public class RequestContainer {
     private final String resourceURI;
     private final String httpMethod;
     private final Object entity;
+    // The below fields are used for exception handling in kafka streams during deserialization
+    private boolean deserializationErrorOccurred;
+    private String deserializationError;
 
     public RequestContainer(final String resourceURI, final String httpMethod, final Object entity) {
         this.resourceURI = resourceURI;
         this.httpMethod = httpMethod;
         this.entity = entity;
+        this.deserializationErrorOccurred = false;
+        this.deserializationError = "";
     }
 
     /**
@@ -54,6 +59,22 @@ public class RequestContainer {
         requestData.put("httpMethod", httpMethod);
         requestData.put("entity", entity);
         return requestData;
+    }
+
+    public boolean isDeserializationErrorOccurred() {
+        return deserializationErrorOccurred;
+    }
+
+    public void setDeserializationErrorOccurred(boolean deserializationErrorOccurred) {
+        this.deserializationErrorOccurred = deserializationErrorOccurred;
+    }
+
+    public String getDeserializationError() {
+        return deserializationError;
+    }
+
+    public void setDeserializationError(String deserializationError) {
+        this.deserializationError = deserializationError;
     }
 
     /**

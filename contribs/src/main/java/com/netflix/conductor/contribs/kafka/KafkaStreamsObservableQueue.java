@@ -6,6 +6,8 @@ import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
+import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
+import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsProductionExceptionHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.RequestContainerSerde;
 import com.netflix.conductor.contribs.kafka.streamsutil.ResponseContainerSerde;
 import com.netflix.conductor.core.config.Configuration;
@@ -43,10 +45,8 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsObservableQueue.class);
     private static final String QUEUE_TYPE = "kafkaStreams";
     private static final String KAFKA_STREAMS_PREFIX = "kafka.streams.";
-    private static final String CLIENT_STORE = "client-store";
-    private static final String SERVICES_STORE ="service-store";
-    private static final String EVENT_STORE = "event-store";
-    private static final int workflowMonitorBranchIndex = 0;
+    private static final int EXECUTE_BRANCH = 0;
+    private static final int ERROR_BRANCH = 1;
     private final Properties streamsProperties;
     private final String queueName;
     private final String apexRequestsTopic;
@@ -100,6 +100,9 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         });
         // apply default configs
         applyConsumerDefaults(properties);
+        // apply exception handlers configs
+        setDeserializationExceptionHandler(properties);
+        setProductionExceptionHandler(properties);
         // Verifies properties
         checkStreamsProperties(properties);
         return properties;
@@ -132,6 +135,26 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     }
 
     /**
+     * Set a custom deserialization exception handler in kafka streams config
+     *
+     * @param properties Properties object for providing the necessary properties to Kafka Streams
+     */
+    private void setDeserializationExceptionHandler(final Properties properties){
+        properties.put(StreamsConfig.DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG,
+                KafkaStreamsDeserializationExceptionHandler.class);
+    }
+
+    /**
+     * Set a custom production/producer exception handler in kafka streams config
+     *
+     * @param properties Properties object for providing the necessary properties to Kafka Streams
+     */
+    private void setProductionExceptionHandler(final Properties properties){
+        properties.put(StreamsConfig.DEFAULT_PRODUCTION_EXCEPTION_HANDLER_CLASS_CONFIG,
+                KafkaStreamsProductionExceptionHandler.class);
+    }
+
+    /**
      * Validates whether the property has given keys.
      *
      * @param properties Properties object for providing the necessary properties to Kafka Streams
@@ -145,46 +168,86 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
                 .collect(Collectors.toList());
     }
 
-    private Topology buildRecoveryStreamTopology(){
-        // This function have not been implemented yet
-        logger.error("Called a function not implemented yet.");
-        // Restores the interrupt by the InterruptedException so that caller can see that
-        // interrupt has occurred.
-        Thread.currentThread().interrupt();
-        throw new UnsupportedOperationException();
-    }
-
     /**
      * Creates the topology for processing the client initial request to the Conductor API
      *
      * @return A kafka streams topology for processing client requests
      */
-    private Topology buildRequestsProcessorStreamTopology(){
+    private Topology buildStreamTopology(){
+        logger.info("Building Kafka Streams Topology for handling requests and responses to/from Conductor");
+        // Create custom Serde objects for processing records
         RequestContainerSerde requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
         ResponseContainerSerde responseContainerSerde = new ResponseContainerSerde();
+        // Build kafka streams topology
         StreamsBuilder builder = new StreamsBuilder();
         // Parent Node
         // Source Node (Responsible for consuming the records from a given topic, that will be processed)
         KStream<String, RequestContainer> requestStream = builder.stream(apexRequestsTopic,
                 Consumed.with(Serdes.String(), requestContainerSerde))
                 .peek((k, v) -> logger.info("Received record. Client: {} Request: {}", k, v));
-        // Child Node of Parent Node - Execute Request to Conductor API and receive response
-        KStream<String, ResponseContainer> executeStream = requestStream.mapValues(resourceHandler::processRequest);
+        // Branch Processor Node
+        // Each record is matched against the given predicates in the order that they're provided.
+        // The branch processor will assign records to a stream on the first match.
+        // WARNING: No attempts are made to match additional predicates.
+        // If no errors occurred during deserialization, process request further
+        Predicate<String, RequestContainer> readyToProcess = (clientId, request) -> !request.isDeserializationErrorOccurred();
+        // If an error occurred, send error to client who made initial request
+        Predicate<String, RequestContainer> isError = (clientId, request) -> request.isDeserializationErrorOccurred();
+        KStream<String, RequestContainer>[] executeDept = requestStream.branch(readyToProcess, isError);
+        // Child Node - Execute Request to Conductor API and receive response
+        KStream<String, ResponseContainer> processedRequest = executeDept[EXECUTE_BRANCH].mapValues(resourceHandler::processRequest);
+        // Child Node - Process error
+        KStream<String, ResponseContainer> processedError = executeDept[ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processError);
         // Sink Node - Send Response to client
-        executeStream.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedRequest.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        // Sink Node - Send Error to client
+        processedError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         return builder.build();
     }
 
-    public void startStream() {
-        Topology requestTopology = buildRequestsProcessorStreamTopology();
-        logger.debug("Requests Topology Description: {}", requestTopology.describe());
-        builtStreams = new KafkaStreams(requestTopology, streamsProperties);
+    /**
+     * Create a KafkaStreams object containing the built topology and properties file
+     * for processing requests to the Conductor API via kafka streams.
+     *
+     * @param streamsTopology A topology object containing the structure of the kafka streams
+     */
+    private void buildKafkaStreams(Topology streamsTopology) {
+        builtStreams = new KafkaStreams(streamsTopology, streamsProperties);
         // here you should examine the throwable/exception and perform an appropriate action!
+
+        // Note on exception handling.
+        // Exception handling can be implemented via implementing interfaces such as
+        // ProductionExceptionHandler or overriding/extending classes such as LogAndContinueExceptionHandler
+        // for deserialization exceptions.
+        // ProductionExceptionHandler handles only exceptions on producer (exceptions occurring when sending messages
+        // via producer), it will not handle exceptions during processing of stream methods (mapValues(), branch(), etc.)
+        // You will need to wrap these methods in try / catch blocks.
+        // For consumer side, kafka streams automatically retry consuming record, because offset will not be changed
+        // until record is consumed and processed. Use setUncaughtExceptionHandler to log exception
+        // or send message to a failure topic.
         builtStreams.setUncaughtExceptionHandler((Thread thread, Throwable throwable) ->
-            logger.error(String.valueOf(throwable)));
+                // You can make it restart the stream, but you have to make sure that this thread is
+                // destroyed once a new thread is spawned to restart the kafka streams
+                logger.error(String.valueOf(throwable)));
+    }
+
+    /**
+     * Builds and start the kafka stream topology and kafka stream object for processing
+     * client requests to Conductor API.
+     */
+    public void startStream() {
+        // Build the topology
+        Topology streamsTopology = buildStreamTopology();
+        logger.info("Requests Topology Description: {}", streamsTopology.describe());
+        // Build/Create Kafka Streams object for starting and processing via kafka streams
+        buildKafkaStreams(streamsTopology);
+        // Sleep Thread to make sure the server is up before processing requests to Conductor
         sleepThread();
+        // Start stream
         logger.info("Starting Kafka Streams for processing client requests to Conductor API");
         builtStreams.start();
+        // Add shutdown hook to respond to SIGTERM and gracefully close the Streams application.
+        Runtime.getRuntime().addShutdownHook(new Thread(builtStreams::close));
     }
 
     /**
@@ -320,13 +383,6 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
             startStream();
         } catch (final Exception e) {
             logger.error("KafkaStreamsObservableQueue.startStream(), exiting due to error! {}", e.getMessage());
-        } finally {
-            try {
-                // Try to disconnect all connections to kafka via a consumer or producer object
-                close();
-            } catch (final Exception e) {
-                logger.error("KafkaStreamsObservableQueue.close(), unable to complete kafka clean up! {}", e.getMessage());
-            }
         }
     }
 }

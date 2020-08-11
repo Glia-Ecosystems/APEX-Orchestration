@@ -68,21 +68,34 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
                 // This method is left empty until needed.
             }
 
+            /**
+             * Handles the deserialization of a record received from Kafka to a RequestContainer object
+             *
+             * @param topic The topic the record was consumed from
+             * @param dataRecord The record received from topic
+             * @return Request Container object of the record received
+             */
             @Override
             public RequestContainer deserialize(final String topic, final byte[] dataRecord) {
                 errorMessage = "";
-                if (dataRecord == null){
-                    return null;
-                }
                 final Map<String, ?> request = jsonStringToMap(new String(dataRecord));
+                // Verify if record is null
                 if (request == null){
-                    // Handle if jsonStringToMap have an error
-                    return null;
+                    // If record sent is null
+                    errorMessage = "Conductor API request message sent via conductor is Null";
+                    RequestContainer requestContainer = new RequestContainer("", "", null);
+                    requestContainer.setDeserializationErrorOccurred(true);
+                    requestContainer.setDeserializationError(errorMessage);
+                    return requestContainer;
                 }
                 // Verifies client message for Conductor
                 if (requestMessageErrors(request)) {
-                    throw new NullPointerException(errorMessage);
-                    // Add statement for returning errors to client via kafka streams.
+                    final String path = (String) request.get("path");
+                    final String method = (String) request.get("method");
+                    RequestContainer requestContainer = new RequestContainer(path, method, request.get("request"));
+                    requestContainer.setDeserializationErrorOccurred(true);
+                    requestContainer.setDeserializationError(errorMessage);
+                    return requestContainer;
                 }
                 // Get the necessary info from the request message for sending to the Conductor API
                 final String path = verifyRequestedURIPath((String) request.get("path"));
@@ -124,13 +137,13 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @return Indicator of if the message contains all required information.
      */
     public boolean requestMessageErrors(final Map<String, ?> requestMessage){
-        if (requestMessage.get("path") == null) {
-            errorMessage = "Conductor API request message sent via conductor contain missing/empty URI path";
-            logger.error("Conductor API request message sent via conductor contain missing/empty URI path");
+        if (requestMessage.get("path") == null || requestMessage.get("path") == "") {
+            errorMessage = "Conductor API request message sent via kafka contain missing/empty URI path";
+            logger.error("Conductor API request message sent via kafka contain missing/empty URI path");
             return true;
-        }else if (requestMessage.get("method") == null) {
-            errorMessage = "Conductor API request message sent via conductor contain missing/empty HTTP method";
-            logger.error("Conductor API request message sent via conductor contain missing/empty HTTP method");
+        }else if (requestMessage.get("method") == null || requestMessage.get("method") == "") {
+            errorMessage = "Conductor API request message sent via kafka contain missing/empty HTTP method";
+            logger.error("Conductor API request message sent via kafka contain missing/empty HTTP method");
             return true;
         }
         return false;
