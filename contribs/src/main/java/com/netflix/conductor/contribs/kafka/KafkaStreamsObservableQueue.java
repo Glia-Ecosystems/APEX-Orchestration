@@ -271,7 +271,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         processedRequest.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Sink Node - Send Error to client
         processedError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedRequest.filter((clientId, response) -> response.isStartedAWorkflow())
+        processedRequest.filter((clientId, response) -> response.isStartedAWorkflow() && response.getResponseEntity() != null)
                  .foreach((client, response) -> threadPool.execute(new WorkflowStatusMonitor(resourceHandler, objectMapper,
                          this, client, (String) response.getResponseEntity())));
         return builder.build();
