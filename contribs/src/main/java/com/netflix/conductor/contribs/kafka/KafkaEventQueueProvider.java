@@ -3,6 +3,8 @@ package com.netflix.conductor.contribs.kafka;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Singleton;
+import com.netflix.conductor.common.utils.JsonMapperProvider;
+import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.EventQueueProvider;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
@@ -34,8 +36,16 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
     public KafkaEventQueueProvider(final Configuration config, final Injector injector) {
         this.config = config;
         logger.info("Kafka Event Queue Provider initialized.");
+        ResourceHandler resourceHandler = null;  // Placeholder for resource handler class if initialized
         if (getBoolean("conductor.kafka.listener.enabled")) {
-            startKafkaListener(injector);
+            resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
+            startKafkaListener(resourceHandler);
+        }
+        if (getBoolean("conductor.kafka.workers.listener.enabled")){
+            if (resourceHandler == null){
+                resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
+            }
+            startKafkaWorkersListener(resourceHandler);
         }
     }
 
@@ -53,19 +63,32 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
     /**
      * Starts the process for the Kafka Listener to process client requests to Conductor via Kafka
      *
-     * @param injector Google Dependency Injector object that builds the graph of objects for applications
+     * @param resourceHandler  Main class for accessing resource classes of Conductor
      */
-    public void startKafkaListener(final Injector injector) {
+    public void startKafkaListener(final ResourceHandler resourceHandler) {
         final String consumerTopic = config.getProperty("kafka.consumer.listener.topic", "");
         final String producerTopic = config.getProperty("kafka.producer.listener.topic", "");
         if (consumerTopic.isEmpty() && producerTopic.isEmpty()) {
             logger.error("Configuration missing for Kafka Consumer and/or Producer topics.");
             throw new IllegalArgumentException("Configuration missing for Kafka Consumer and/or Producer topics.");
         }
-        Thread kafkaListener = new Thread(new KafkaStreamsObservableQueue(injector, config, consumerTopic, producerTopic));
+        Thread kafkaListener = new Thread(new KafkaStreamsObservableQueue(resourceHandler, config, consumerTopic,
+                producerTopic));
         kafkaListener.setDaemon(true);
         kafkaListener.start();
         logger.info("Kafka Listener Started.");
+    }
+
+    /**
+     *  Starts the process for the Kafka Listener to process tasks between workers/services and Conductor
+     *
+     * @param resourceHandler Main class for accessing resource classes of Conductor
+     */
+    public void startKafkaWorkersListener(final ResourceHandler resourceHandler){
+        Thread kafkaWorkerListener = new Thread(new KafkaStreamsWorkersObservableQueue(resourceHandler, config));
+        kafkaWorkerListener.setDaemon(true);
+        kafkaWorkerListener.start();
+        logger.info("Kafka Workers Listener Started.");
     }
 
 
