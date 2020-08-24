@@ -76,19 +76,19 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      * Constructor of the KafkaStreamsObservableQueue for using kafka streams processing
      * client requests to Conductor API and publishing responses from Conductor API to client
      *
-     * @param injector      Google Dependency Injector object that builds the graph of objects for applications
+     * @param resourceHandler  Main class for accessing resource classes of Conductor
      * @param configuration Main configuration file for the Conductor application
      * @param requestTopic  Topic for consuming messages
      * @param responseTopic Topic for publishing messages
      */
     @Inject
-    public KafkaStreamsObservableQueue(final Injector injector, final Configuration configuration,
+    public KafkaStreamsObservableQueue(final ResourceHandler resourceHandler, final Configuration configuration,
                                        final String requestTopic, final String responseTopic){
         final Map<String, Object> configurationMap = getConfigurationMap(configuration);
         this.queueName = "";
         this.apexRequestsTopic = requestTopic;
         this.apexResponsesTopic = responseTopic;
-        this.resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
+        this.resourceHandler = resourceHandler;
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.listener.thread.pool", 20));
         this.streamsProperties = createStreamsConfig(configurationMap);
         initKafkaProducer(configurationMap);
