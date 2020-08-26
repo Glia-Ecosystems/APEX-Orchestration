@@ -85,6 +85,20 @@ public class ResponseContainer {
         return status;
     }
 
+    /**
+     * Get the request object
+     *
+     * @return request object
+     */
+    public Map<String, Object> getRequest() {
+        return request;
+    }
+
+    /**
+     * Get the response error message
+     *
+     * @return response error message
+     */
     public String getResponseErrorMessage() {
         return responseErrorMessage;
     }

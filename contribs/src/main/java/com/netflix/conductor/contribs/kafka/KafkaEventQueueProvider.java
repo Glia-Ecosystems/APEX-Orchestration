@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Singleton;
 import com.netflix.conductor.common.utils.JsonMapperProvider;
+import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.EventQueueProvider;
@@ -24,6 +25,7 @@ import static java.lang.Boolean.getBoolean;
 public class KafkaEventQueueProvider implements EventQueueProvider {
     private static final Logger logger = LoggerFactory.getLogger(KafkaEventQueueProvider.class);
     protected final Map<String, KafkaObservableQueue> queues = new ConcurrentHashMap<>();
+    private final KafkaPropertiesProvider kafkaPropertiesProvider;
     private final Configuration config;
 
     /**
@@ -35,8 +37,10 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
     @Inject
     public KafkaEventQueueProvider(final Configuration config, final Injector injector) {
         this.config = config;
+        this.kafkaPropertiesProvider = new KafkaPropertiesProvider(config);
         logger.info("Kafka Event Queue Provider initialized.");
-        ResourceHandler resourceHandler = null;  // Placeholder for resource handler class if initialized
+        // Placeholder for resource handler class if needed to be initialized
+        ResourceHandler resourceHandler = null;
         if (getBoolean("conductor.kafka.listener.enabled")) {
             resourceHandler = new ResourceHandler(injector, new JsonMapperProvider().get());
             startKafkaListener(resourceHandler);
@@ -57,7 +61,8 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
      */
     @Override
     public ObservableQueue getQueue(final String queueURI) {
-        return queues.computeIfAbsent(queueURI, q -> new KafkaObservableQueue(queueURI, config));
+        return queues.computeIfAbsent(queueURI, q -> new KafkaObservableQueue(queueURI, config,
+                kafkaPropertiesProvider));
     }
 
     /**
@@ -72,8 +77,10 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
             logger.error("Configuration missing for Kafka Consumer and/or Producer topics.");
             throw new IllegalArgumentException("Configuration missing for Kafka Consumer and/or Producer topics.");
         }
-        Thread kafkaListener = new Thread(new KafkaStreamsObservableQueue(resourceHandler, config, consumerTopic,
-                producerTopic));
+        Thread kafkaListener = new Thread(new KafkaStreamsObservableQueue(resourceHandler, config,
+                                                                          kafkaPropertiesProvider,
+                                                                          consumerTopic,
+                                                                          producerTopic));
         kafkaListener.setDaemon(true);
         kafkaListener.start();
         logger.info("Kafka Listener Started.");
@@ -85,7 +92,16 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
      * @param resourceHandler Main class for accessing resource classes of Conductor
      */
     public void startKafkaWorkersListener(final ResourceHandler resourceHandler){
-        Thread kafkaWorkerListener = new Thread(new KafkaStreamsWorkersObservableQueue(resourceHandler, config));
+        final String registerWorkersConsumerTopic = config.getProperty("kafka.streams.workers.consumer.listener.topic", "");
+        final String registerWorkersProducerTopic = config.getProperty("kafka.streams.workers.producer.listener.topic", "");
+        if (registerWorkersConsumerTopic.isEmpty() && registerWorkersProducerTopic.isEmpty()) {
+            logger.error("Topic missing for Kafka Worker listener.");
+            throw new IllegalArgumentException("Topic missing for Kafka Worker listener.");
+        }
+        Thread kafkaWorkerListener = new Thread(new KafkaStreamsWorkersObservableQueue(resourceHandler, config,
+                                                                                       kafkaPropertiesProvider,
+                                                                                       registerWorkersConsumerTopic,
+                                                                                       registerWorkersProducerTopic));
         kafkaWorkerListener.setDaemon(true);
         kafkaWorkerListener.start();
         logger.info("Kafka Workers Listener Started.");

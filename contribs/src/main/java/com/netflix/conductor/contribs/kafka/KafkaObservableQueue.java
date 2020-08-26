@@ -2,16 +2,15 @@ package com.netflix.conductor.contribs.kafka;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.Inject;
+import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
 import com.netflix.conductor.core.execution.ApplicationException;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.KafkaException;
@@ -23,7 +22,6 @@ import rx.Observable.OnSubscribe;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.Map.Entry;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
@@ -39,9 +37,6 @@ public class KafkaObservableQueue implements ObservableQueue {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaObservableQueue.class);
     private static final String QUEUE_TYPE = "kafka";
-    private static final String KAFKA_PREFIX = "kafka.";
-    private static final String KAFKA_PRODUCER_PREFIX = "kafka.producer.";
-    private static final String KAFKA_CONSUMER_PREFIX = "kafka.consumer.";
     private final String queueName;
     private final int pollIntervalInMS;
     private final Duration pollTimeoutInMs;
@@ -56,11 +51,12 @@ public class KafkaObservableQueue implements ObservableQueue {
      * @param config    Main configuration file for the Conductor application
      */
     @Inject
-    public KafkaObservableQueue(final String queueName, final Configuration config) {
+    public KafkaObservableQueue(final String queueName, final Configuration config,
+                                final KafkaPropertiesProvider kafkaPropertiesProvider) {
         this.queueName = queueName;  // Topic
         this.pollIntervalInMS = config.getIntProperty("kafka.consumer.pollingInterval", 1000);
         this.pollTimeoutInMs = Duration.ofMillis(config.getIntProperty("kafka.consumer.longPollTimeout", 1000));
-        init(config);  // Init Kafka producer and consumer properties
+        init(config, kafkaPropertiesProvider);  // Init Kafka producer and consumer properties
     }
 
     /**
@@ -70,40 +66,16 @@ public class KafkaObservableQueue implements ObservableQueue {
      * the kafka cluster. Fails if any mandatory configs are missing.
      *
      * @param config Main configuration file for the Conductor application
+     * @param kafkaPropertiesProvider  Filters through the configurations and provide the needed kafka properties
      */
-    private void init(final Configuration config) {
+    private void init(final Configuration config, final KafkaPropertiesProvider kafkaPropertiesProvider) {
         // You must set the properties in the .properties files first for creating a producer/consumer object
-        final Properties producerProperties = new Properties();
-        final Properties consumerProperties = new Properties();
+        final Properties producerProperties = kafkaPropertiesProvider.getProducerProperties();
+        final Properties consumerProperties = kafkaPropertiesProvider.getConsumerProperties();
         final String serverId = config.getServerId();
         consumerProperties.put("group.id", queueName + "_group");
         consumerProperties.put("client.id", queueName + "_consumer_" + serverId);
         producerProperties.put("client.id", queueName + "_producer_" + serverId);
-
-        final Map<String, Object> configurationMap = config.getAll();
-        if (Objects.isNull(configurationMap)) {
-            throw new NullPointerException("Configuration missing");
-        }
-        // Filter through configuration file to get the necessary properties for Kafka producer and consumer
-        for (final Entry<String, Object> entry : configurationMap.entrySet()) {
-            final String key = entry.getKey();
-            final String value = (String) entry.getValue();
-            if (key.startsWith(KAFKA_PREFIX)) {
-                if (key.startsWith(KAFKA_PRODUCER_PREFIX)) {
-                    producerProperties.put(key.replaceAll(KAFKA_PRODUCER_PREFIX, ""), value);
-                } else if (key.startsWith(KAFKA_CONSUMER_PREFIX)) {
-                    consumerProperties.put(key.replaceAll(KAFKA_CONSUMER_PREFIX, ""), value);
-                } else {
-                    producerProperties.put(key.replaceAll(KAFKA_PREFIX, ""), value);
-                    consumerProperties.put(key.replaceAll(KAFKA_PREFIX, ""), value);
-                }
-            }
-        }
-        // Verifies properties
-        checkProducerProperties(producerProperties);
-        checkConsumerProperties(consumerProperties);
-        // Apply default properties for Kafka Consumer if not configured in configuration file
-        applyConsumerDefaults(consumerProperties);
 
         try {
             // Init Kafka producer and consumer
@@ -116,68 +88,6 @@ public class KafkaObservableQueue implements ObservableQueue {
         } catch (final KafkaException ke) {
             throw new KafkaException("Kafka initialization failed.", ke.getCause());
         }
-    }
-
-    /**
-     * Checks that the mandatory configurations are available for the kafka consumer.
-     *
-     * @param consumerProperties `Kafka Properties object for providing the necessary properties to Kafka Consumer`
-     */
-    private void checkConsumerProperties(final Properties consumerProperties) {
-        final List<String> mandatoryKeys = Arrays.asList(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG);
-        final List<String> keysNotFound = hasKeyAndValue(consumerProperties, mandatoryKeys);
-        if (!keysNotFound.isEmpty()) {
-            logger.error("Configuration missing for Kafka consumer. {}", keysNotFound);
-            throw new IllegalStateException("Configuration missing for Kafka consumer." + keysNotFound.toString());
-        }
-    }
-
-    /**
-     * Checks that the mandatory configurations are available for kafka producer.
-     *
-     * @param producerProperties Kafka Properties object for providing the necessary properties to Kafka Producer
-     */
-    private void checkProducerProperties(final Properties producerProperties) {
-        final List<String> mandatoryKeys = Arrays.asList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG);
-        final List<String> keysNotFound = hasKeyAndValue(producerProperties, mandatoryKeys);
-        if (!keysNotFound.isEmpty()) {
-            logger.error("Configuration missing for Kafka producer. {}", keysNotFound);
-            throw new IllegalStateException("Configuration missing for Kafka producer." + keysNotFound.toString());
-        }
-    }
-
-    /**
-     * Apply Kafka consumer default properties, if not configured in configuration given file.
-     *
-     * @param consumerProperties Kafka Properties object for providing the necessary properties to Kafka Consumer
-     */
-    private void applyConsumerDefaults(final Properties consumerProperties) {
-        if (null == consumerProperties.getProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG)) {
-            consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-        }
-        if (null == consumerProperties.getProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)) {
-            consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
-        }
-    }
-
-    /**
-     * Validates whether the property has given keys.
-     *
-     * @param properties Kafka Properties object for providing the necessary properties to Kafka Consumer/Producer
-     * @param keys       List of the names of mandatory kafka properties needed:
-     *                   [Bootstrap servers, key serializer, value serializer, key deserializer, value deserializer]
-     * @return List of mandatory properties missing from the configuration file
-     */
-    private List<String> hasKeyAndValue(final Properties properties, final List<String> keys) {
-        final List<String> keysNotFound = new ArrayList<>();
-        for (final String key : keys) {
-            if (!properties.containsKey(key) || Objects.isNull(properties.get(key))) {
-                keysNotFound.add(key);
-            }
-        }
-        return keysNotFound;
     }
 
     /**
