@@ -1,6 +1,7 @@
 package com.netflix.conductor.contribs.kafka.resource.builder;
 
 import javax.ws.rs.Path;
+import javax.ws.rs.QueryParam;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -28,7 +29,7 @@ public class ResourceMethod {
                           final Class<?> returnType) {
         this.method = method;
         this.uri = uri;
-        this.uriPattern = uri == null ? "" : createPatternURI(uri.value());
+        this.uriPattern = uri == null ? "" : createPatternURI(uri.value(), method);
         this.httpMethod = httpMethod;
         this.annotations = annotations;
         this.returnType = returnType;
@@ -37,6 +38,7 @@ public class ResourceMethod {
 
     /**
      * Get the method object
+     *
      * @return Method
      */
     public Method getMethod() {
@@ -75,9 +77,10 @@ public class ResourceMethod {
      * ex: Raw URI -> /workflow/{name}, Regex URI -> /workflow/([^/]+?)
      *
      * @param uri Raw URI of the method
+     * @param method Method object of the resource
      * @return URI regex
      */
-    private String createPatternURI(final String uri) {
+    private String createPatternURI(final String uri, final Method method) {
         // Regex expression: ([^/]+?)
         // (): Capturing group - parenthesis means, capture text grouped together within parenthesis and extract substring
         // []: Bracket - Match any of the characters inside the bracket
@@ -91,14 +94,12 @@ public class ResourceMethod {
         final String regexForQueryParams = "(\\?.*)?";
         // This  indicator is used to assist in parsing/building a raw URI to a regex URI
         boolean okayToProcess = true;
-        boolean regexAddedForBraces = false;
         final StringBuilder patternURI = new StringBuilder();
         for (int i  = 0; i < uri.length(); i++){
             final char c = uri.charAt(i);
             if (c == '{') {
                 patternURI.append(regexForPathParams);
                 okayToProcess = false;
-                regexAddedForBraces = true;
             } else if  (c == '}') {
                 okayToProcess = true;
             }
@@ -108,7 +109,25 @@ public class ResourceMethod {
         }
         // If regexPattern not added for PathParam, then add regexPattern at the end of
         // URI for QueryParam, for if a query param is given to URI
-        return regexAddedForBraces ? patternURI.toString() : patternURI.toString() + regexForQueryParams;
+        return checkIfAnyQueryParamExist(method) ? patternURI.toString() + regexForQueryParams: patternURI.toString();
+    }
+
+    /**
+     * Checks if the method have any query parameters annotations
+     *
+     * @param method Method object of the resource
+     * @return Indicator if method have any query parameters
+     */
+    private boolean checkIfAnyQueryParamExist(final Method method){
+        final Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        for (Annotation[] annotationList: parameterAnnotations){
+            for (Annotation annotation: annotationList){
+                if (QueryParam.class == annotation.annotationType()){
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

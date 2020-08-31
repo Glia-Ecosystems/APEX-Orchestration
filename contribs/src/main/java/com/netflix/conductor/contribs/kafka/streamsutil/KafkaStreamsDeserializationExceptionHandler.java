@@ -16,7 +16,7 @@ public class KafkaStreamsDeserializationExceptionHandler extends LogAndContinueE
 
     /**
      * Exception handler for errors that occur during deserialization of records
-     * @param context
+     * @param context Context of a Processor object
      * @param record Record received from Kafka Streams
      * @param exception Exception that occurred during deserialization
      * @return DeserializationHandlerResponse object to inform kafka streams to continue processing further records
@@ -29,12 +29,27 @@ public class KafkaStreamsDeserializationExceptionHandler extends LogAndContinueE
     }
 
     /**
-     * Process the exception into a response container to be return to the client who made the request
+     * Process the key exception into a response container to be return to the client who made the request
      *
      * @param requestContainer Contains all the needed information for processing the request
      * @return Response of the exception that occurred for client
      */
-    public static ResponseContainer processError(RequestContainer requestContainer){
+    public static ResponseContainer processKeyError(RequestContainer requestContainer){
+        // Create a request and response container
+        final ResponseContainer response = new ResponseContainer(requestContainer);
+        response.setStatus(400);
+        response.setResponseEntity(Response.Status.BAD_REQUEST);
+        response.setResponseErrorMessage("Key can not be null");
+        return response;
+    }
+
+    /**
+     * Process the value exception into a response container to be return to the client who made the request
+     *
+     * @param requestContainer Contains all the needed information for processing the request
+     * @return Response of the exception that occurred for client
+     */
+    public static ResponseContainer processValueError(RequestContainer requestContainer){
         // Create a request and response container
         final ResponseContainer response = new ResponseContainer(requestContainer);
         response.setStatus(400);
