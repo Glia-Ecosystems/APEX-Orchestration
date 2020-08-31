@@ -34,7 +34,7 @@ public class WorkerTasksStream implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(WorkerTasksStream.class);
     private String workerQueuedTasksTopic = "TASK-QUEUE";
     private String updateTaskTopic = "UPDATE-TASK";
-    private String updateTaskTopicResponse = "UPDATE-TASK-Response";
+    private String updateTaskTopicResponse = "UPDATE-TASK-RESPONSE";
     private String ackTopic = "ACKNOWLEDGE";
     private String ackResponseTopic = "ACK-RESPONSE";
     private static final int KEY_ERROR_BRANCH = 0;
