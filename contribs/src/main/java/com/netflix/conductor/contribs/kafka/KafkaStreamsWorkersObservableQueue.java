@@ -27,8 +27,9 @@ import java.util.*;
 
 public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsWorkersObservableQueue.class);
-    private static final int REGISTER_BRANCH = 0;
-    private static final int ERROR_BRANCH = 1;
+    private static final int KEY_ERROR_BRANCH = 0;
+    private static final int REGISTER_BRANCH = 1;
+    private static final int VALUE_ERROR_BRANCH = 2;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -49,14 +50,16 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
         this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties();
-        this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider,
-                new JsonMapperProvider().get());
+        this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, streamsProperties,
+                kafkaPropertiesProvider.getProducerProperties(), resourceHandler, new JsonMapperProvider().get());
     }
 
     /**
+     * Creates the topology for registering workers to Conductor and creating task streams object for
+     * the registered worker to process tasks between worker and Conductor
      *
      *
-     * @return A kafka streams topology for processing client requests
+     * @return A kafka task streams topology for registering workers
      */
     private Topology buildWorkersRegistrationTopology(){
         logger.info("Building Kafka Streams Topology for handling registration of workers to Conductor");
@@ -67,15 +70,18 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         KStream<String, RequestContainer> registerStream = builder.stream(registerWorkersConsumerTopic,
                 Consumed.with(Serdes.String(), requestContainerSerde))
                 .peek((k, v) -> logger.info("Worker requesting registration to Conductor: {}", v));
-        final Predicate<String, RequestContainer> readyToRegister = (clientId, request) -> !request.isDeserializationErrorOccurred();
-        final Predicate<String, RequestContainer> errorOccurred = (clientId, request) -> request.isDeserializationErrorOccurred();
-        final KStream<String, RequestContainer>[] executeDept = registerStream.branch(readyToRegister, errorOccurred);
-        final KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[REGISTER_BRANCH].mapValues(resourceHandler::processRequest);
-        final KStream<String, ResponseContainer> processedError = executeDept[ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processError);
-        processedError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        Predicate<String, RequestContainer> keyError = (clientId, request) -> clientId.isEmpty();
+        Predicate<String, RequestContainer> readyToRegister = (clientId, request) -> !request.isDeserializationErrorOccurred();
+        Predicate<String, RequestContainer> errorOccurred = (clientId, request) -> request.isDeserializationErrorOccurred();
+        KStream<String, RequestContainer>[] executeDept = registerStream.branch(keyError, readyToRegister, errorOccurred);
+        KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
+        KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[REGISTER_BRANCH].mapValues(resourceHandler::processRequest);
+        KStream<String, ResponseContainer> processedValueError = executeDept[VALUE_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
+        processedKeyError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRegistrationOfWorker.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedRegistrationOfWorker.filter((key, response) -> response.getStatus() == 200)
-                .foreach((key, response) -> workersTaskStreamFactory.processWorker(response));
+        processedRegistrationOfWorker.filter((worker, response) -> response.getStatus() == 200)
+                .foreach(workersTaskStreamFactory::createOrDestroyWorkerTaskStream);
         return builder.build();
     }
 
@@ -107,10 +113,10 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     }
 
     /**
-     * Builds and start the kafka stream topology and kafka stream object for register workers
-     * and stream processing tasks between workers and Conductor API.
+     * Builds and start the kafka stream topology and kafka stream object for registering workers
+     * and creating task streams for processing tasks between workers and Conductor API.
      */
-    public void startStreams() {
+    public void startRegisterWorkerStream() {
         // Build the topology
         Topology registerWorkersTopology = buildWorkersRegistrationTopology();
         logger.info("Register Workers Topology Description: {}", registerWorkersTopology.describe());
@@ -119,11 +125,10 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         // Sleep Thread to make sure the server is up before processing requests to Conductor
         sleepThread();
         // Start stream
-        logger.info("Starting Kafka Streams for processing client requests to Conductor API");
+        logger.info("Starting Kafka Streams for registering workers to Conductor");
         registerWorkerStream.start();
         // Add shutdown hook to respond to SIGTERM and gracefully close the Streams application.
         Runtime.getRuntime().addShutdownHook(new Thread(registerWorkerStream::close));
-
     }
 
     /**
@@ -241,7 +246,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     @Override
     public void run() {
         try {
-            startStreams();
+            startRegisterWorkerStream();
         } catch (final Exception e) {
             logger.error("KafkaStreamsWorkersObservableQueue.startStream(), exiting due to error! {}", e.getMessage());
         }

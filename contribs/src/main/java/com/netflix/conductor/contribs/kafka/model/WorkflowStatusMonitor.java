@@ -18,7 +18,7 @@ import java.util.Map;
  */
 public class WorkflowStatusMonitor implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowStatusMonitor.class);
-    private static final Gson gson = new Gson();
+    private final Gson gson;
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
     private final KafkaStreamsObservableQueue kafka;
@@ -31,6 +31,7 @@ public class WorkflowStatusMonitor implements Runnable {
                                  final String workflowID) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
+        this.gson = new Gson();
         this.kafka = kafkaStreams;
         this.clientID = clientID;
         this.workflowID = workflowID;

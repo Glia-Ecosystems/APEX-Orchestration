@@ -49,8 +49,9 @@ import java.util.concurrent.Executors;
 public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsObservableQueue.class);
     private static final String QUEUE_TYPE = "kafkaStreams";
-    private static final int EXECUTE_BRANCH = 0;
-    private static final int ERROR_BRANCH = 1;
+    private static final int KEY_ERROR_BRANCH = 0;
+    private static final int EXECUTE_BRANCH = 1;
+    private static final int VALUE_ERROR_BRANCH = 2;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -106,18 +107,24 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         // Each record is matched against the given predicates in the order that they're provided.
         // The branch processor will assign records to a stream on the first match.
         // WARNING: No attempts are made to match additional predicates.
+        // If a no key given error occurs, send error to client who made initial request
+        final Predicate<String, RequestContainer> keyError = (clientId, request) -> clientId.isEmpty();
         // If no errors occurred during deserialization, process request further
         final Predicate<String, RequestContainer> readyToProcess = (clientId, request) -> !request.isDeserializationErrorOccurred();
-        // If an error occurred, send error to client who made initial request
+        // If a value error occurred, send error to client who made initial request
         final Predicate<String, RequestContainer> isError = (clientId, request) -> request.isDeserializationErrorOccurred();
-        final KStream<String, RequestContainer>[] executeDept = requestStream.branch(readyToProcess, isError);
+        final KStream<String, RequestContainer>[] executeDept = requestStream.branch(keyError, readyToProcess, isError);
+        // Child Node - Process no key given error
+        final KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
         // Child Node - Execute Request to Conductor API and receive response
         final KStream<String, ResponseContainer> processedRequest = executeDept[EXECUTE_BRANCH].mapValues(resourceHandler::processRequest);
-        // Child Node - Process error
-        final KStream<String, ResponseContainer> processedError = executeDept[ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processError);
+        // Child Node - Process value error
+        final KStream<String, ResponseContainer> processedError = executeDept[VALUE_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
+        // Sink Node - Send Key Error to client
+        processedKeyError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Sink Node - Send Response to client
         processedRequest.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        // Sink Node - Send Error to client
+        // Sink Node - Send Value Error to client
         processedError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRequest.filter((clientId, response) -> response.isStartedAWorkflow() && response.getResponseEntity() != null)
                  .foreach((client, response) -> threadPool.execute(new WorkflowStatusMonitor(resourceHandler, objectMapper,
