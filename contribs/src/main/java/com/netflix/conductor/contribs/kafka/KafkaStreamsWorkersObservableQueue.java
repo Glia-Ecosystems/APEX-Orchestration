@@ -61,6 +61,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
      *
      * @return A kafka task streams topology for registering workers
      */
+    @SuppressWarnings("unchecked")
     private Topology buildWorkersRegistrationTopology(){
         logger.info("Building Kafka Streams Topology for handling registration of workers to Conductor");
         // Build kafka streams topology

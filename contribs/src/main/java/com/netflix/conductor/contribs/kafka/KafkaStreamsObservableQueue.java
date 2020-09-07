@@ -94,6 +94,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
      *
      * @return A kafka streams topology for processing client requests
      */
+    @SuppressWarnings("unchecked")
     private Topology buildStreamTopology(){
         logger.info("Building Kafka Streams Topology for handling requests and responses to/from Conductor");
         // Build kafka streams topology

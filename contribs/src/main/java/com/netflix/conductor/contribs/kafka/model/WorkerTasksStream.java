@@ -88,6 +88,7 @@ public class WorkerTasksStream implements Runnable {
      * @param producerTopic The topic to publish records
      * @return A kafka task streams topology for processing tasks
      */
+    @SuppressWarnings("unchecked")
     private Topology buildTaskStreamTopology(final String streamType, final String consumeTopic, String producerTopic) {
         logger.info("Building Kafka {} Task Stream Topology for {}", streamType, worker);
         // Build kafka streams topology
