@@ -2,6 +2,7 @@ package com.netflix.conductor.contribs.kafka.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
+import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 
@@ -11,22 +12,23 @@ import java.util.concurrent.Executors;
 
 public class WorkersTaskStreamFactory {
 
-    private final Set<String> activeWorkers;
+    private final List<String> activeWorkers;
     private final ExecutorService threadPool;
-    private final Properties streamProperties;
+    private final Properties updateStreamProperties;
+    private final Properties ackStreamProperties;
     private final Properties producerProperties;
     private final int pollBatchSize;
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
 
-    public WorkersTaskStreamFactory(final Configuration configuration, final Properties streamProperties,
-                                    final Properties producerProperties, final ResourceHandler resourceHandler,
-                                    final ObjectMapper objectMapper) {
-        this.activeWorkers = new LinkedHashSet<>();
+    public WorkersTaskStreamFactory(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider,
+                                    final ResourceHandler resourceHandler, final ObjectMapper objectMapper) {
+        this.activeWorkers = new ArrayList<>();
         this.objectMapper = objectMapper;
         this.resourceHandler = resourceHandler;
-        this.streamProperties = streamProperties;
-        this.producerProperties = producerProperties;
+        this.updateStreamProperties = kafkaPropertiesProvider.getStreamsProperties("update");
+        this.ackStreamProperties = kafkaPropertiesProvider.getStreamsProperties("ack");
+        this.producerProperties = kafkaPropertiesProvider.getProducerProperties();
         this.pollBatchSize = configuration.getIntProperty("conductor.kafka.workers.listener.poll.batch.size", 30);
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.workers.listener.thread.pool", 30));
     }
@@ -56,16 +58,15 @@ public class WorkersTaskStreamFactory {
      */
     public void createOrDestroyWorkerTaskStream(final String worker, final ResponseContainer responseContainer) {
         Map<String, Object> request = responseContainer.getRequest();
-        if (request.get("httpMethod") == "DELETE") {
+        String httpMethod = (String) request.get("httpMethod");
+        if (httpMethod.equals("DELETE")) {
             removeInActiveWorker(worker);
         } else {
             ArrayList<?> entity = (ArrayList<?>) request.get("entity");
             TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
-            if (!activeWorkers.contains(worker)) {
-                addActiveWorker(worker);
-                threadPool.execute(new WorkerTasksStream(resourceHandler, streamProperties, producerProperties, activeWorkers,
-                        worker, taskDef.getName(), pollBatchSize));
-            }
+            addActiveWorker(worker);
+            threadPool.execute(new WorkerTasksStream(resourceHandler, updateStreamProperties, ackStreamProperties,
+                    producerProperties, activeWorkers, worker, taskDef.getName(), pollBatchSize));
         }
     }
 }

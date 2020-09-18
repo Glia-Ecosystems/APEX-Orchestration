@@ -49,9 +49,9 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.responseContainerSerde = new ResponseContainerSerde();
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
-        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties();
-        this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, streamsProperties,
-                kafkaPropertiesProvider.getProducerProperties(), resourceHandler, new JsonMapperProvider().get());
+        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register");
+        this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider,
+                resourceHandler, new JsonMapperProvider().get());
     }
 
     /**
@@ -70,8 +70,8 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         // Source Node (Responsible for consuming the records from a given topic, that will be processed)
         KStream<String, RequestContainer> registerStream = builder.stream(registerWorkersConsumerTopic,
                 Consumed.with(Serdes.String(), requestContainerSerde))
-                .peek((k, v) -> logger.info("Worker requesting registration to Conductor: {}", v));
-        Predicate<String, RequestContainer> keyError = (clientId, request) -> clientId.isEmpty();
+                .peek((k, v) -> logger.info("Worker {} requesting registration or un-registration to Conductor: {}", k, v));
+        Predicate<String, RequestContainer> keyError = (serviceName, request) -> serviceName.isEmpty();
         Predicate<String, RequestContainer> readyToRegister = (clientId, request) -> !request.isDeserializationErrorOccurred();
         Predicate<String, RequestContainer> errorOccurred = (clientId, request) -> request.isDeserializationErrorOccurred();
         KStream<String, RequestContainer>[] executeDept = registerStream.branch(keyError, readyToRegister, errorOccurred);
@@ -82,7 +82,9 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRegistrationOfWorker.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRegistrationOfWorker.filter((worker, response) -> response.getStatus() == 200)
-                .foreach(workersTaskStreamFactory::createOrDestroyWorkerTaskStream);
+                .foreach((worker, response) ->
+                        workersTaskStreamFactory.createOrDestroyWorkerTaskStream(worker.substring(1, worker.length() - 1),
+                                response));
         return builder.build();
     }
 
@@ -120,7 +122,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     public void startRegisterWorkerStream() {
         // Build the topology
         Topology registerWorkersTopology = buildWorkersRegistrationTopology();
-        logger.info("Register Workers Topology Description: {}", registerWorkersTopology.describe());
+        logger.debug("Register Workers Topology Description: {}", registerWorkersTopology.describe());
         // Build/Create Kafka Streams object for starting and processing via kafka streams
         KafkaStreams registerWorkerStream = buildKafkaStream(registerWorkersTopology);
         // Sleep Thread to make sure the server is up before processing requests to Conductor

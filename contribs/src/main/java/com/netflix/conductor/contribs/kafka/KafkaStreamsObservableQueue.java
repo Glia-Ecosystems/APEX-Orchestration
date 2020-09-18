@@ -85,7 +85,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         this.responseContainerSerde = new ResponseContainerSerde();
         this.objectMapper = new JsonMapperProvider().get();
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.listener.thread.pool", 20));
-        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties();
+        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("client");
         this.producer = new KafkaProducer<>(kafkaPropertiesProvider.getProducerProperties());
     }
 
@@ -167,7 +167,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     public void startStream() {
         // Build the topology
         Topology streamsTopology = buildStreamTopology();
-        logger.info("Requests Topology Description: {}", streamsTopology.describe());
+        logger.debug("Requests Topology Description: {}", streamsTopology.describe());
         // Build/Create Kafka Streams object for starting and processing via kafka streams
         KafkaStreams clientRequestStream = buildKafkaStream(streamsTopology);
         // Sleep Thread to make sure the server is up before processing requests to Conductor
