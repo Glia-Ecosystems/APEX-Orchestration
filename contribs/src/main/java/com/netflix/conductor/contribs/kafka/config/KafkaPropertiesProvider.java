@@ -34,7 +34,7 @@ public class KafkaPropertiesProvider {
      *
      * @return Properties file for kafka streams configuration
      */
-    public Properties getStreamsProperties(){
+    public Properties getStreamsProperties(final String streamID){
         final Properties streamsProperties = new Properties();
         // Filter through configuration file to get the necessary properties for Kafka Streams
         configurationMap.forEach((key, value) -> {
@@ -49,6 +49,9 @@ public class KafkaPropertiesProvider {
         setKafkaStreamsProductionExceptionHandler(streamsProperties);
         // Verifies properties
         checkStreamsProperties(streamsProperties);
+        // Set unique application ID
+        String applicationID = (String) streamsProperties.get(StreamsConfig.APPLICATION_ID_CONFIG);
+        streamsProperties.put(StreamsConfig.APPLICATION_ID_CONFIG, applicationID + "-" + streamID);
         return streamsProperties;
     }
 

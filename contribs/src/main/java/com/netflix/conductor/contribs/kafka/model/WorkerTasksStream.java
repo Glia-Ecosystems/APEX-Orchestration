@@ -24,7 +24,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -32,19 +31,20 @@ import java.util.concurrent.Executors;
 public class WorkerTasksStream implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkerTasksStream.class);
-    private String workerQueuedTasksTopic = "TASK-QUEUE";
-    private String updateTaskTopic = "UPDATE-TASK";
-    private String updateTaskTopicResponse = "UPDATE-TASK-RESPONSE";
-    private String ackTopic = "ACKNOWLEDGE";
-    private String ackResponseTopic = "ACK-RESPONSE";
+    private String workerQueuedTasksTopic = "Task-Queue";
+    private String updateTaskTopic = "Update-Task";
+    private String updateTaskTopicResponse = "Update-Task-Response";
+    private String ackTopic = "Acknowledge";
+    private String ackResponseTopic = "Ack-Response";
     private static final int KEY_ERROR_BRANCH = 0;
     private static final int REGISTER_BRANCH = 1;
     private static final int VALUE_ERROR_BRANCH = 2;
     private final KafkaProducer<String, String> producer;
-    private final Properties streamsProperties;
+    private final Properties updateStreamsProperties;
+    private final Properties ackStreamsProperties;
     private final ResourceHandler resourceHandler;
     private final ExecutorService taskPublishPool;
-    private final Set<String> activeWorkers;
+    private final List<String> activeWorkers;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -56,22 +56,24 @@ public class WorkerTasksStream implements Runnable {
     private KafkaStreams ackTaskStream;
 
 
-    public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties streamsProperties,
-                             final Properties producerProperties, final Set<String> activeWorkers, final String worker,
-                             final String taskName, final int pollBatchSize){
+    public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties updateStreamsProperties,
+                             final Properties ackStreamsProperties, final Properties producerProperties,
+                             final List<String> activeWorkers, final String worker, final String taskName,
+                             final int pollBatchSize){
         this.resourceHandler = resourceHandler;
         this.worker = worker;
         this.taskName = taskName;
-        this.workerQueuedTasksTopic = worker.toUpperCase() + "-" + workerQueuedTasksTopic;
-        this.updateTaskTopic = worker.toUpperCase() + "-" + updateTaskTopic;
-        this.updateTaskTopicResponse = worker.toUpperCase() + "-" + updateTaskTopicResponse;
-        this.ackTopic = worker.toUpperCase() + "-" + ackTopic;
-        this.ackResponseTopic = worker.toUpperCase() + "-" + ackResponseTopic;
+        this.workerQueuedTasksTopic = worker + "-" + workerQueuedTasksTopic;
+        this.updateTaskTopic = worker + "-" + updateTaskTopic;
+        this.updateTaskTopicResponse = worker + "-" + updateTaskTopicResponse;
+        this.ackTopic = worker + "-" + ackTopic;
+        this.ackResponseTopic = worker + "-" + ackResponseTopic;
         this.activeWorkers = activeWorkers;
         this.gson = new Gson();
         this.requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
         this.responseContainerSerde = new ResponseContainerSerde();
-        this.streamsProperties = streamsProperties;
+        this.updateStreamsProperties = updateStreamsProperties;
+        this.ackStreamsProperties = ackStreamsProperties;
         this.producer = new KafkaProducer<>(producerProperties);
         this.pollBatchSize = pollBatchSize;
         this.taskPublishPool = Executors.newFixedThreadPool(pollBatchSize);
@@ -120,7 +122,7 @@ public class WorkerTasksStream implements Runnable {
      *
      * @param streamsTopology A topology object containing the structure of the kafka streams
      */
-    private KafkaStreams buildKafkaStream(Topology streamsTopology) {
+    private KafkaStreams buildKafkaStream(final Topology streamsTopology, final Properties streamsProperties) {
         KafkaStreams builtStream = new KafkaStreams(streamsTopology, streamsProperties);
         // here you should examine the throwable/exception and perform an appropriate action!
 
@@ -198,11 +200,11 @@ public class WorkerTasksStream implements Runnable {
     private void startTaskStream(){
         // Build the topology
         Topology updateTaskStreamTopology = buildTaskStreamTopology("Update", updateTaskTopic, updateTaskTopicResponse);
-        logger.info("{} Update Task Stream Topology Description: {}", worker, updateTaskStreamTopology.describe());
-        updateTaskStream = buildKafkaStream(updateTaskStreamTopology);
+        logger.debug("{} Update Task Stream Topology Description: {}", worker, updateTaskStreamTopology.describe());
+        updateTaskStream = buildKafkaStream(updateTaskStreamTopology, updateStreamsProperties);
         Topology ackTaskStreamTopology = buildTaskStreamTopology("Acknowledge", ackTopic, ackResponseTopic);
-        logger.info("{} Ack Task Stream Topology Description: {}", worker, ackTaskStreamTopology.describe());
-        ackTaskStream = buildKafkaStream(ackTaskStreamTopology);
+        logger.debug("{} Ack Task Stream Topology Description: {}", worker, ackTaskStreamTopology.describe());
+        ackTaskStream = buildKafkaStream(ackTaskStreamTopology, ackStreamsProperties);
         updateTaskStream.start();
         ackTaskStream.start();
         // Add shutdown hook to respond to SIGTERM and gracefully close the Streams application.
