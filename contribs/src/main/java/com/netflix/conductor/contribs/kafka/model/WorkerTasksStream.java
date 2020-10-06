@@ -97,10 +97,10 @@ public class WorkerTasksStream implements Runnable {
         StreamsBuilder builder = new StreamsBuilder();
         KStream<String, RequestContainer> taskStream = builder.stream(consumeTopic, Consumed.with(Serdes.String(),
                 requestContainerSerde));
-        Predicate<String, RequestContainer> keyError = (clientId, request) -> clientId.isEmpty();
-        Predicate<String, RequestContainer> continueTaskStream = (clientId, request) ->
+        Predicate<String, RequestContainer> keyError = (workerName, request) -> workerName.isEmpty();
+        Predicate<String, RequestContainer> continueTaskStream = (workerName, request) ->
                 !request.isDeserializationErrorOccurred();
-        Predicate<String, RequestContainer> errorOccurred = (clientId, request) ->
+        Predicate<String, RequestContainer> errorOccurred = (workerName, request) ->
                 request.isDeserializationErrorOccurred();
         KStream<String, RequestContainer>[] executeDept = taskStream.branch(keyError, continueTaskStream,
                 errorOccurred);

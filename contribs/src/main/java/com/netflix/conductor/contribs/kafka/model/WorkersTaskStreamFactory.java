@@ -14,8 +14,7 @@ public class WorkersTaskStreamFactory {
 
     private final List<String> activeWorkers;
     private final ExecutorService threadPool;
-    private final Properties updateStreamProperties;
-    private final Properties ackStreamProperties;
+    private final KafkaPropertiesProvider kafkaPropertiesProvider;
     private final Properties producerProperties;
     private final int pollBatchSize;
     private final ResourceHandler resourceHandler;
@@ -26,8 +25,7 @@ public class WorkersTaskStreamFactory {
         this.activeWorkers = new ArrayList<>();
         this.objectMapper = objectMapper;
         this.resourceHandler = resourceHandler;
-        this.updateStreamProperties = kafkaPropertiesProvider.getStreamsProperties("update");
-        this.ackStreamProperties = kafkaPropertiesProvider.getStreamsProperties("ack");
+        this.kafkaPropertiesProvider = kafkaPropertiesProvider;
         this.producerProperties = kafkaPropertiesProvider.getProducerProperties();
         this.pollBatchSize = configuration.getIntProperty("conductor.kafka.workers.listener.poll.batch.size", 30);
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.workers.listener.thread.pool", 30));
@@ -65,6 +63,8 @@ public class WorkersTaskStreamFactory {
             ArrayList<?> entity = (ArrayList<?>) request.get("entity");
             TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
             addActiveWorker(worker);
+            Properties updateStreamProperties =kafkaPropertiesProvider.getStreamsProperties("update-" + worker);
+            Properties ackStreamProperties = kafkaPropertiesProvider.getStreamsProperties("ack-" + worker);
             threadPool.execute(new WorkerTasksStream(resourceHandler, updateStreamProperties, ackStreamProperties,
                     producerProperties, activeWorkers, worker, taskDef.getName(), pollBatchSize));
         }
