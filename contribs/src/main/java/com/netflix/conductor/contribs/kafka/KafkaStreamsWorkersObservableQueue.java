@@ -72,8 +72,8 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
                 Consumed.with(Serdes.String(), requestContainerSerde))
                 .peek((k, v) -> logger.info("Worker {} requesting registration or un-registration to Conductor: {}", k, v));
         Predicate<String, RequestContainer> keyError = (serviceName, request) -> serviceName.isEmpty();
-        Predicate<String, RequestContainer> readyToRegister = (clientId, request) -> !request.isDeserializationErrorOccurred();
-        Predicate<String, RequestContainer> errorOccurred = (clientId, request) -> request.isDeserializationErrorOccurred();
+        Predicate<String, RequestContainer> readyToRegister = (serviceName, request) -> !request.isDeserializationErrorOccurred();
+        Predicate<String, RequestContainer> errorOccurred = (serviceName, request) -> request.isDeserializationErrorOccurred();
         KStream<String, RequestContainer>[] executeDept = registerStream.branch(keyError, readyToRegister, errorOccurred);
         KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
         KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[REGISTER_BRANCH].mapValues(resourceHandler::processRequest);
@@ -82,9 +82,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRegistrationOfWorker.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRegistrationOfWorker.filter((worker, response) -> response.getStatus() == 200)
-                .foreach((worker, response) ->
-                        workersTaskStreamFactory.createOrDestroyWorkerTaskStream(worker.substring(1, worker.length() - 1),
-                                response));
+                .foreach(workersTaskStreamFactory::createOrDestroyWorkerTaskStream);
         return builder.build();
     }
 
