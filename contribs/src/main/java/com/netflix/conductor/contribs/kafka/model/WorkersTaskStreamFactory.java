@@ -63,10 +63,9 @@ public class WorkersTaskStreamFactory {
             ArrayList<?> entity = (ArrayList<?>) request.get("entity");
             TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
             addActiveWorker(worker);
-            Properties updateStreamProperties =kafkaPropertiesProvider.getStreamsProperties("update-" + worker);
-            Properties ackStreamProperties = kafkaPropertiesProvider.getStreamsProperties("ack-" + worker);
-            threadPool.execute(new WorkerTasksStream(resourceHandler, updateStreamProperties, ackStreamProperties,
-                    producerProperties, activeWorkers, worker, taskDef.getName(), pollBatchSize));
+            Properties responseStreamProperties =kafkaPropertiesProvider.getStreamsProperties("response-" + worker);
+            threadPool.execute(new WorkerTasksStream(resourceHandler, responseStreamProperties, producerProperties,
+                    activeWorkers, worker, taskDef.getName(), pollBatchSize));
         }
     }
 }
