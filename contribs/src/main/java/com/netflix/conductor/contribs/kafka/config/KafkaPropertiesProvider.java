@@ -3,6 +3,7 @@ package com.netflix.conductor.contribs.kafka.config;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsProductionExceptionHandler;
 import com.netflix.conductor.core.config.Configuration;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.streams.StreamsConfig;
@@ -16,6 +17,7 @@ public class KafkaPropertiesProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaPropertiesProvider.class);
     private static final String KAFKA_PREFIX = "kafka.";
+    private static final String KAFKA_ADMIN_PREFIX = "kafka.admin.";
     private static final String KAFKA_PRODUCER_PREFIX = "kafka.producer.";
     private static final String KAFKA_CONSUMER_PREFIX = "kafka.consumer.";
     private static final String KAFKA_STREAMS_PREFIX = "kafka.streams.";
@@ -90,7 +92,7 @@ public class KafkaPropertiesProvider {
         configurationMap.forEach((key, value) -> {
             if (key.startsWith(KAFKA_PREFIX)) {
                 if (key.startsWith(KAFKA_CONSUMER_PREFIX)) {
-                    consumerProperties.put(key.replaceAll(KAFKA_PRODUCER_PREFIX, ""), value);
+                    consumerProperties.put(key.replaceAll(KAFKA_CONSUMER_PREFIX, ""), value);
                 } else {
                     consumerProperties.put(key.replaceAll(KAFKA_PREFIX, ""), value);
                 }
@@ -101,6 +103,27 @@ public class KafkaPropertiesProvider {
         // Apply default properties for Kafka Consumer if not configured in configuration file
         applyConsumerDefaults(consumerProperties);
         return consumerProperties;
+    }
+
+    /**
+     *
+     * @return
+     */
+    public Properties getAdminProperties(){
+        final Properties adminProperties = new Properties();
+        // Filter through configuration file to get the necessary properties for Kafka Streams
+        configurationMap.forEach((key, value) -> {
+            if (key.startsWith(KAFKA_PREFIX)) {
+                if (key.startsWith(KAFKA_ADMIN_PREFIX)) {
+                    adminProperties.put(key.replaceAll(KAFKA_ADMIN_PREFIX, ""), value);
+                } else {
+                    adminProperties.put(key.replaceAll(KAFKA_PREFIX, ""), value);
+                }
+            }
+        });
+        // Verifies properties
+        checkAdminProperties(adminProperties);
+        return adminProperties;
     }
 
     /**
@@ -117,6 +140,20 @@ public class KafkaPropertiesProvider {
             throw new NullPointerException("Configuration missing");
         }
         return configMap;
+    }
+
+    /**
+     *
+     * @param properties
+     */
+    private void checkAdminProperties(final Properties properties){
+        final List<String> mandatoryKeys = Arrays.asList(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+                AdminClientConfig.CLIENT_ID_CONFIG);
+        final List<String> keysNotFound = hasKeyAndValue(properties, mandatoryKeys);
+        if (!keysNotFound.isEmpty()) {
+            logger.error("Configuration missing for Kafka admins. {}", keysNotFound);
+            throw new IllegalStateException("Configuration missing for Kafka admins." + keysNotFound.toString());
+        }
     }
 
     /**

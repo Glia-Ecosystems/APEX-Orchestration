@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -31,9 +32,6 @@ import java.util.concurrent.Executors;
 public class WorkerTasksStream implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkerTasksStream.class);
-    private String queuedTasksTopic = "Task-Queue";
-    private String updateAndAckTopic = "Update-Ack";
-    private String updateAndAckResponseTopic = "Update-Ack-Response";
     private static final int KEY_ERROR_BRANCH = 0;
     private static final int REGISTER_BRANCH = 1;
     private static final int VALUE_ERROR_BRANCH = 2;
@@ -47,6 +45,9 @@ public class WorkerTasksStream implements Runnable {
     private final ResponseContainerSerde responseContainerSerde;
     private final String worker;
     private final String taskName;
+    private final String queuedTasksTopic;
+    private final String updateAndAckTopic;
+    private final String updateAndAckResponseTopic;
     private final int pollBatchSize;
     private final Gson gson;
     private KafkaStreams tasksStream;
@@ -54,13 +55,13 @@ public class WorkerTasksStream implements Runnable {
 
     public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties responseStreamProperties,
                              final Properties producerProperties, final List<String> activeWorkers, final String worker,
-                             final String taskName, final int pollBatchSize){
+                             final String taskName, final Map<String, String> topics, final int pollBatchSize){
         this.resourceHandler = resourceHandler;
         this.worker = worker;
         this.taskName = taskName;
-        this.queuedTasksTopic = worker + "-" + queuedTasksTopic;
-        this.updateAndAckTopic = worker + "-" + updateAndAckTopic;
-        this.updateAndAckResponseTopic = worker + "-" + updateAndAckResponseTopic;
+        this.queuedTasksTopic = topics.get("taskQueue");
+        this.updateAndAckTopic = topics.get("updateAndAck");
+        this.updateAndAckResponseTopic = topics.get("updateAndAckResponse");
         this.responseStreamProperties = responseStreamProperties;
         this.activeWorkers = activeWorkers;
         this.gson = new Gson();
