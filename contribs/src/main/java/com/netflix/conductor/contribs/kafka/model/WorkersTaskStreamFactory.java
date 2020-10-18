@@ -15,7 +15,7 @@ public class WorkersTaskStreamFactory {
     private static final String QUEUED_TASKS_TOPIC = "Task-Queue";
     private static final String UPDATE_AND_ACK_TOPIC = "Update-Ack";
     private static final String UPDATE_AND_ACK_RESPONSE_TOPIC = "Update-Ack-Response";
-    private final List<String> activeWorkers;
+    private final Set<String> activeWorkers;
     private final ExecutorService threadPool;
     private final KafkaTopicsManager kafkaTopicManager;
     private final KafkaPropertiesProvider kafkaPropertiesProvider;
@@ -26,7 +26,7 @@ public class WorkersTaskStreamFactory {
 
     public WorkersTaskStreamFactory(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider,
                                     final ResourceHandler resourceHandler, final ObjectMapper objectMapper) {
-        this.activeWorkers = new ArrayList<>();
+        this.activeWorkers = new LinkedHashSet<>();
         this.objectMapper = objectMapper;
         this.resourceHandler = resourceHandler;
         this.kafkaPropertiesProvider = kafkaPropertiesProvider;
@@ -39,6 +39,7 @@ public class WorkersTaskStreamFactory {
     /**
      * Creates or destroy a worker task stream object/thread
      *
+     * @param  worker The name of the worker
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      */
     public ResponseContainer createOrDestroyWorkerTaskStream(final String worker, final ResponseContainer responseContainer) {
@@ -49,45 +50,106 @@ public class WorkersTaskStreamFactory {
         } else {
             ArrayList<?> entity = (ArrayList<?>) request.get("entity");
             TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
-            addActiveWorker(worker);  // Adds worker to active workers collection
+            String uniqueWorkerName = setUniqueName(worker);  // Set a unique service name
+            addActiveWorker(uniqueWorkerName);  // Adds worker to active workers collection
             Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
-            responseContainer.setResponseEntity(topics);  // Return topics to service
-            createWorkerTaskStream(worker, taskDef.getName(), topics);  // Start worker task stream
+
+            // Return unique service name and topics to service
+            Map<String, Object> registrationResponse = new HashMap<>();
+            registrationResponse.put("uniqueServiceName", uniqueWorkerName);
+            registrationResponse.put("topics", topics);
+            responseContainer.setResponseEntity(registrationResponse);
+
+            // Start worker task stream
+            createWorkerTaskStream(uniqueWorkerName, taskDef.getName(), topics);
         }
         return responseContainer;
     }
 
-    private void createWorkerTaskStream(final String worker, final String taskName, final Map<String, String> topics){
-        Properties responseStreamProperties =kafkaPropertiesProvider.getStreamsProperties("response-" + worker);
+    /**
+     * Creates a worker task stream for processing tasks between Conductor and the respective service
+     * @param workerName The unique service name
+     * @param taskName The name of the task definition
+     * @param topics A list of topics used for Conductor and service to communicate
+     */
+    private void createWorkerTaskStream(final String workerName, final String taskName, final Map<String, String> topics){
+        Properties responseStreamProperties =kafkaPropertiesProvider.getStreamsProperties("response-" + workerName);
         threadPool.execute(new WorkerTasksStream(resourceHandler, responseStreamProperties, producerProperties,
-                activeWorkers, worker, taskName, topics, pollBatchSize));
+                activeWorkers, workerName, taskName, topics, pollBatchSize));
 
     }
 
+    /**
+     * Create the generated service topics on the Kafka cluster
+     * @param worker The name of the worker
+     * @return  A list of topics used for Conductor and service to communicate
+     */
     private Map<String, String> createTopics(final String worker){
-        Map<String, String> topics = new HashMap<>();
-        topics.put("taskQueue", worker + "-" + QUEUED_TASKS_TOPIC);
-        topics.put("updateAndAck", worker + "-" + UPDATE_AND_ACK_TOPIC);
-        topics.put("updateAndAckResponse", worker + "-" + UPDATE_AND_ACK_RESPONSE_TOPIC);
+        Map<String, String> topics = generateServiceTopics(worker);
         kafkaTopicManager.createTopics(new ArrayList<>(topics.values()));
         return topics;
     }
 
     /**
+     * Set a unique service name for service to communicate with Conductor
+     * This assist with Conductor being able to communicate with multiple instances of a service
+     * know when a particular instance is no longer running so that thread (Worker Task Stream) can
+     * be closed
+     * @param worker The name of the worker
+     * @return A unique service name
+     */
+    private String setUniqueName(String worker){
+        if (activeWorkers.contains(worker)){
+            int occurrences = activeWorkerFrequency(activeWorkers, worker);
+            return worker + occurrences;
+        }
+        return worker;
+    }
+
+    /**
      * Add an active worker to the active workers collection
      *
-     * @param workerName The task name of the worker
+     * @param workerName The unique service name
      */
     private void addActiveWorker(String workerName){
         activeWorkers.add(workerName);
     }
 
     /**
-     * Removes an inactive worker from the active workers collection
+     * Generates topics for Conductor to communicate with the respective service for processing tasks
+     * @param worker The name of the worker
+     * @return List of generated topics for the service
+     */
+    private Map<String, String> generateServiceTopics(final String worker){
+        Map<String, String> topics = new HashMap<>();
+        topics.put("taskQueue", worker + "-" + QUEUED_TASKS_TOPIC);
+        topics.put("updateAndAck", worker + "-" + UPDATE_AND_ACK_TOPIC);
+        topics.put("updateAndAckResponse", worker + "-" + UPDATE_AND_ACK_RESPONSE_TOPIC);
+        return topics;
+    }
+
+    /**
+     * Removes an inactive service from the active workers collection
      *
-     * @param workerName The task name of the worker
+     * @param workerName The name of the worker
      */
     private void removeInActiveWorker(String workerName){
         activeWorkers.remove(workerName);
+    }
+
+    /**
+     * Checks the number of instances of a service currently registered to Conductoro
+     * @param collection A collection object
+     * @param worker The name of the worker
+     * @return The number of instances already running
+     */
+    private int activeWorkerFrequency(final Collection<String> collection, final String worker){
+        int occurrence = 0;
+        for (String activeWorker: collection){
+            if (activeWorker.contains(worker)){
+                occurrence += 1;
+            }
+        }
+        return occurrence;
     }
 }

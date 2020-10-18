@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,7 +40,7 @@ public class WorkerTasksStream implements Runnable {
     private final Properties responseStreamProperties;
     private final ResourceHandler resourceHandler;
     private final ExecutorService taskPublishPool;
-    private final List<String> activeWorkers;
+    private final Set<String> activeWorkers;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -54,7 +55,7 @@ public class WorkerTasksStream implements Runnable {
 
 
     public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties responseStreamProperties,
-                             final Properties producerProperties, final List<String> activeWorkers, final String worker,
+                             final Properties producerProperties, final Set<String> activeWorkers, final String worker,
                              final String taskName, final Map<String, String> topics, final int pollBatchSize){
         this.resourceHandler = resourceHandler;
         this.worker = worker;
