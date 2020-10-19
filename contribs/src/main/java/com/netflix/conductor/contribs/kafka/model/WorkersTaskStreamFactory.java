@@ -50,13 +50,13 @@ public class WorkersTaskStreamFactory {
         } else {
             ArrayList<?> entity = (ArrayList<?>) request.get("entity");
             TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
-            String uniqueWorkerName = setUniqueName(worker);  // Set a unique service name
+            String uniqueWorkerName = setUniqueKey(worker);  // Set a unique service name
             addActiveWorker(uniqueWorkerName);  // Adds worker to active workers collection
             Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
 
             // Return unique service name and topics to service
             Map<String, Object> registrationResponse = new HashMap<>();
-            registrationResponse.put("uniqueServiceName", uniqueWorkerName);
+            registrationResponse.put("uniqueKey", uniqueWorkerName);
             registrationResponse.put("topics", topics);
             responseContainer.setResponseEntity(registrationResponse);
 
@@ -91,14 +91,14 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Set a unique service name for service to communicate with Conductor
-     * This assist with Conductor being able to communicate with multiple instances of a service
-     * know when a particular instance is no longer running so that thread (Worker Task Stream) can
-     * be closed
+     * Set a unique key for a service to communicate with Conductor via Kafka
+     * This assist with Conductor being able to communicate with multiple instances of a service and
+     * know when a particular instance is no longer running (communicating with Conductor) so that
+     * thread (Worker Task Stream) can be closed
      * @param worker The name of the worker
-     * @return A unique service name
+     * @return A unique key
      */
-    private String setUniqueName(String worker){
+    private String setUniqueKey(String worker){
         if (activeWorkers.contains(worker)){
             int occurrences = activeWorkerFrequency(activeWorkers, worker);
             return worker + occurrences;
@@ -107,9 +107,9 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Add an active worker to the active workers collection
+     * Add the name (or unique key) of an active worker to the active workers collection
      *
-     * @param workerName The unique service name
+     * @param workerName The unique (key) service name
      */
     private void addActiveWorker(String workerName){
         activeWorkers.add(workerName);
@@ -138,7 +138,7 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Checks the number of instances of a service currently registered to Conductoro
+     * Checks the number of instances of a service currently registered to Conductor
      * @param collection A collection object
      * @param worker The name of the worker
      * @return The number of instances already running
