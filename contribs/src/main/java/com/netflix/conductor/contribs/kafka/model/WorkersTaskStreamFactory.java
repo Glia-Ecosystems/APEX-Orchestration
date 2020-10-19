@@ -12,10 +12,10 @@ import java.util.concurrent.Executors;
 
 public class WorkersTaskStreamFactory {
 
-    private static final String QUEUED_TASKS_TOPIC = "Task-Queue";
-    private static final String UPDATE_AND_ACK_TOPIC = "Update-Ack";
-    private static final String UPDATE_AND_ACK_RESPONSE_TOPIC = "Update-Ack-Response";
-    private final Set<String> activeWorkers;
+    private static final String TASKS_TOPIC = "Task-Queue";
+    private static final String UPDATE_TOPIC = "Update";
+    private static final String STATUS_TOPIC = "Status";
+    private final Map<String, Integer> activeWorkers;
     private final ExecutorService threadPool;
     private final KafkaTopicsManager kafkaTopicManager;
     private final KafkaPropertiesProvider kafkaPropertiesProvider;
@@ -26,7 +26,7 @@ public class WorkersTaskStreamFactory {
 
     public WorkersTaskStreamFactory(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider,
                                     final ResourceHandler resourceHandler, final ObjectMapper objectMapper) {
-        this.activeWorkers = new LinkedHashSet<>();
+        this.activeWorkers = new HashMap<>();
         this.objectMapper = objectMapper;
         this.resourceHandler = resourceHandler;
         this.kafkaPropertiesProvider = kafkaPropertiesProvider;
@@ -42,27 +42,19 @@ public class WorkersTaskStreamFactory {
      * @param  worker The name of the worker
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      */
-    public ResponseContainer createOrDestroyWorkerTaskStream(final String worker, final ResponseContainer responseContainer) {
+    public ResponseContainer createWorkerTaskStream(final String worker, final ResponseContainer responseContainer) {
         Map<String, Object> request = responseContainer.getRequest();
-        String httpMethod = (String) request.get("httpMethod");
-        if (httpMethod.equals("DELETE")) {
-            removeInActiveWorker(worker);
-        } else {
-            ArrayList<?> entity = (ArrayList<?>) request.get("entity");
-            TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
-            String uniqueWorkerName = setUniqueKey(worker);  // Set a unique service name
-            addActiveWorker(uniqueWorkerName);  // Adds worker to active workers collection
-            Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
+        ArrayList<?> entity = (ArrayList<?>) request.get("entity");
+        TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
+        addActiveWorker(worker);  // Adds worker to active workers collection
+        Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
 
-            // Return unique service name and topics to service
-            Map<String, Object> registrationResponse = new HashMap<>();
-            registrationResponse.put("uniqueKey", uniqueWorkerName);
-            registrationResponse.put("topics", topics);
-            responseContainer.setResponseEntity(registrationResponse);
-
-            // Start worker task stream
-            createWorkerTaskStream(uniqueWorkerName, taskDef.getName(), topics);
+        // When the first instance of a service is registered, create and start the worker task stream
+        if (activeWorkers.get(worker) == 1){
+            createWorkerTaskStream(worker, taskDef.getName(), topics);
         }
+        // Return topics to service
+        responseContainer.setResponseEntity(topics);
         return responseContainer;
     }
 
@@ -91,28 +83,20 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Set a unique key for a service to communicate with Conductor via Kafka
-     * This assist with Conductor being able to communicate with multiple instances of a service and
-     * know when a particular instance is no longer running (communicating with Conductor) so that
-     * thread (Worker Task Stream) can be closed
-     * @param worker The name of the worker
-     * @return A unique key
-     */
-    private String setUniqueKey(String worker){
-        if (activeWorkers.contains(worker)){
-            int occurrences = activeWorkerFrequency(activeWorkers, worker);
-            return worker + occurrences;
-        }
-        return worker;
-    }
-
-    /**
-     * Add the name (or unique key) of an active worker to the active workers collection
+     * Add the name of an active worker to the active workers collection and
+     * set the number of instances of a worker currently running.
      *
-     * @param workerName The unique (key) service name
+     * This assist with Conductor knowing when a particular service is no longer
+     * running (communicating with Conductor) so that thread (Worker Task Stream) can be closed
+     * @param worker The unique (key) service name
      */
-    private void addActiveWorker(String workerName){
-        activeWorkers.add(workerName);
+    private void addActiveWorker(final String worker) {
+        if (!activeWorkers.containsKey(worker)) {
+            activeWorkers.put(worker, 1);
+        } else {
+            int frequency = activeWorkers.get(worker) + 1;
+            activeWorkers.put(worker, frequency);
+        }
     }
 
     /**
@@ -122,9 +106,9 @@ public class WorkersTaskStreamFactory {
      */
     private Map<String, String> generateServiceTopics(final String worker){
         Map<String, String> topics = new HashMap<>();
-        topics.put("taskQueue", worker + "-" + QUEUED_TASKS_TOPIC);
-        topics.put("updateAndAck", worker + "-" + UPDATE_AND_ACK_TOPIC);
-        topics.put("updateAndAckResponse", worker + "-" + UPDATE_AND_ACK_RESPONSE_TOPIC);
+        topics.put("taskTopic", worker + "-" + TASKS_TOPIC);
+        topics.put("updateTopic", worker + "-" + UPDATE_TOPIC);
+        topics.put("statusTopic", worker + "-" + STATUS_TOPIC);
         return topics;
     }
 
@@ -135,21 +119,5 @@ public class WorkersTaskStreamFactory {
      */
     private void removeInActiveWorker(String workerName){
         activeWorkers.remove(workerName);
-    }
-
-    /**
-     * Checks the number of instances of a service currently registered to Conductor
-     * @param collection A collection object
-     * @param worker The name of the worker
-     * @return The number of instances already running
-     */
-    private int activeWorkerFrequency(final Collection<String> collection, final String worker){
-        int occurrence = 0;
-        for (String activeWorker: collection){
-            if (activeWorker.contains(worker)){
-                occurrence += 1;
-            }
-        }
-        return occurrence;
     }
 }

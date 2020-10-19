@@ -72,7 +72,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         // Source Node (Responsible for consuming the records from a given topic, that will be processed)
         KStream<String, RequestContainer> registerStream = builder.stream(registerWorkersConsumerTopic,
                 Consumed.with(Serdes.String(), requestContainerSerde))
-                .peek((k, v) -> logger.info("Worker {} requesting registration or un-registration to Conductor: {}", k, v));
+                .peek((k, v) -> logger.info("Worker {} requesting registration to Conductor: {}", k, v));
         // Branch Processor Node
         // Each record is matched against the given predicates in the order that they're provided.
         // The branch processor will assign records to a stream on the first match.
@@ -101,7 +101,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         Predicate<String, ResponseContainer> registrationUnSuccessful = (serviceName, response) -> response.getStatus() != 200;
         KStream<String, ResponseContainer>[] successDept = processedRegistrationOfWorker.branch(registrationSuccessful,
                 registrationUnSuccessful);
-        successDept[REGISTRATION_SUCCESS_BRANCH].mapValues(workersTaskStreamFactory::createOrDestroyWorkerTaskStream)
+        successDept[REGISTRATION_SUCCESS_BRANCH].mapValues(workersTaskStreamFactory::createWorkerTaskStream)
                 .to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         successDept[REGISTRATION_UNSUCCESSFUL_BRANCH].to(registerWorkersProducerTopic, Produced.with(Serdes.String(),
                 responseContainerSerde));

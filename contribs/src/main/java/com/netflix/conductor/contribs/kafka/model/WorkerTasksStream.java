@@ -25,7 +25,6 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,29 +39,30 @@ public class WorkerTasksStream implements Runnable {
     private final Properties responseStreamProperties;
     private final ResourceHandler resourceHandler;
     private final ExecutorService taskPublishPool;
-    private final Set<String> activeWorkers;
+    private final Map<String, Integer> activeWorkers;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
     private final String worker;
     private final String taskName;
-    private final String queuedTasksTopic;
-    private final String updateAndAckTopic;
-    private final String updateAndAckResponseTopic;
+    private final String tasksTopic;
+    private final String updateTopic;
+    private final String statusTopic;
     private final int pollBatchSize;
     private final Gson gson;
     private KafkaStreams tasksStream;
 
 
     public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties responseStreamProperties,
-                             final Properties producerProperties, final Set<String> activeWorkers, final String worker,
-                             final String taskName, final Map<String, String> topics, final int pollBatchSize){
+                             final Properties producerProperties, final Map<String, Integer>activeWorkers,
+                             final String worker, final String taskName, final Map<String, String> topics,
+                             final int pollBatchSize){
         this.resourceHandler = resourceHandler;
         this.worker = worker;
         this.taskName = taskName;
-        this.queuedTasksTopic = topics.get("taskQueue");
-        this.updateAndAckTopic = topics.get("updateAndAck");
-        this.updateAndAckResponseTopic = topics.get("updateAndAckResponse");
+        this.tasksTopic = topics.get("taskTopic");
+        this.updateTopic = topics.get("updateTopic");
+        this.statusTopic = topics.get("statusTopic");
         this.responseStreamProperties = responseStreamProperties;
         this.activeWorkers = activeWorkers;
         this.gson = new Gson();
@@ -83,10 +83,10 @@ public class WorkerTasksStream implements Runnable {
      */
     @SuppressWarnings("unchecked")
     private Topology buildTaskStreamTopology() {
-        logger.info("Building Kafka Response Task Stream Topology for {}", worker);
+        logger.info("Building Kafka Update Task Stream Topology for {}", worker);
         // Build kafka streams topology
         StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, RequestContainer> taskStream = builder.stream(updateAndAckTopic, Consumed.with(Serdes.String(),
+        KStream<String, RequestContainer> taskStream = builder.stream(updateTopic, Consumed.with(Serdes.String(),
                 requestContainerSerde));
         Predicate<String, RequestContainer> keyError = (workerName, request) -> workerName.isEmpty();
         Predicate<String, RequestContainer> continueTaskStream = (workerName, request) ->
@@ -101,9 +101,9 @@ public class WorkerTasksStream implements Runnable {
                 mapValues(resourceHandler::processRequest);
         KStream<String, ResponseContainer> processedValueError = executeDept[VALUE_ERROR_BRANCH].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
-        processedTask.to(updateAndAckResponseTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedKeyError.to(updateAndAckResponseTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedValueError.to(updateAndAckResponseTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedTask.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedKeyError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedValueError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         return builder.build();
     }
 
@@ -140,7 +140,7 @@ public class WorkerTasksStream implements Runnable {
      */
     @SuppressWarnings("unchecked")
     private void pollAndPublish(){
-        while (activeWorkers.contains(worker)){
+        while (activeWorkers.containsKey(worker)) {
             ResponseContainer responseContainer = batchPollTasks();
             List<Task> batchTasks = (List<Task>) responseContainer.getResponseEntity();
             if (batchTasks != null && !batchTasks.isEmpty()){
@@ -169,7 +169,7 @@ public class WorkerTasksStream implements Runnable {
      */
     public void publishTask(final String service, final String task) {
         final RecordMetadata metadata;
-        final ProducerRecord<String, String> record = new ProducerRecord<>(queuedTasksTopic, service, task);
+        final ProducerRecord<String, String> record = new ProducerRecord<>(tasksTopic, service, task);
         try {
             metadata = producer.send(record).get();
             final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
@@ -177,9 +177,9 @@ public class WorkerTasksStream implements Runnable {
             logger.debug(producerLogging);
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.error("Publish task to kafka topic {} failed with an error: {}", queuedTasksTopic, e.getMessage(), e);
+            logger.error("Publish task to kafka topic {} failed with an error: {}", tasksTopic, e.getMessage(), e);
         } catch (final ExecutionException e) {
-            logger.error("Publish task to kafka topic {} failed with an error: {}", queuedTasksTopic, e.getMessage(), e);
+            logger.error("Publish task to kafka topic {} failed with an error: {}", tasksTopic, e.getMessage(), e);
             throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
         }
     }
