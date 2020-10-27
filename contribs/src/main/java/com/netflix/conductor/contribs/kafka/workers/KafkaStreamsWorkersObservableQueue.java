@@ -1,10 +1,9 @@
-package com.netflix.conductor.contribs.kafka;
+package com.netflix.conductor.contribs.kafka.workers;
 
 import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
-import com.netflix.conductor.contribs.kafka.model.WorkersTaskStreamFactory;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.*;
 import com.netflix.conductor.core.config.Configuration;
@@ -39,6 +38,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     private final Properties streamsProperties;
     private final String registerWorkersConsumerTopic;
     private final String registerWorkersProducerTopic;
+    private final HeartbeatCoordinator heartbeatCoordinator;
     private final WorkersTaskStreamFactory workersTaskStreamFactory;
 
     @Inject
@@ -52,6 +52,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
         this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register");
+        this.heartbeatCoordinator = new HeartbeatCoordinator(configuration, kafkaPropertiesProvider);
         this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider,
                 resourceHandler, new JsonMapperProvider().get());
     }
@@ -263,6 +264,13 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     }
 
     /**
+     * Clean stop of the heartbeat thread
+     */
+    private void cleanUp(){
+        heartbeatCoordinator.stopHeartbeat();
+    }
+
+    /**
      * Creates a separate thread from the main thread for using Kafka Streams to
      * register workers and processing tasks between workers and Conductor API
      */
@@ -271,7 +279,9 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         try {
             startRegisterWorkerStream();
         } catch (final Exception e) {
-            logger.error("KafkaStreamsWorkersObservableQueue.startStream(), exiting due to error! {}", e.getCause());
+            logger.error("KafkaStreamsWorkersObservableQueue.startStream(), exiting due to error! %s", e.getCause());
+        } finally {
+            cleanUp();
         }
     }
 }

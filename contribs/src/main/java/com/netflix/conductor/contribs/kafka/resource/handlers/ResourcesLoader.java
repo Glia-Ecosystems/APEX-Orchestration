@@ -1,5 +1,6 @@
 package com.netflix.conductor.contribs.kafka.resource.handlers;
 
+import com.netflix.conductor.contribs.kafka.resource.utils.ResourceUtilities;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Opcodes;
