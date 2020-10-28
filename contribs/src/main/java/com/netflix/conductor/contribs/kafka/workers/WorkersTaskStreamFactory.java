@@ -1,8 +1,10 @@
-package com.netflix.conductor.contribs.kafka.model;
+package com.netflix.conductor.contribs.kafka.workers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
+import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
+import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 
@@ -15,7 +17,7 @@ public class WorkersTaskStreamFactory {
     private static final String TASKS_TOPIC = "Task-Queue";
     private static final String UPDATE_TOPIC = "Update";
     private static final String STATUS_TOPIC = "Status";
-    private final Map<String, Integer> activeWorkers;
+    private final ActiveWorkersMonitor activeWorkersMonitor;
     private final ExecutorService threadPool;
     private final KafkaTopicsManager kafkaTopicManager;
     private final KafkaPropertiesProvider kafkaPropertiesProvider;
@@ -26,11 +28,11 @@ public class WorkersTaskStreamFactory {
 
     public WorkersTaskStreamFactory(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider,
                                     final ResourceHandler resourceHandler, final ObjectMapper objectMapper) {
-        this.activeWorkers = new HashMap<>();
         this.objectMapper = objectMapper;
         this.resourceHandler = resourceHandler;
         this.kafkaPropertiesProvider = kafkaPropertiesProvider;
         this.kafkaTopicManager = new KafkaTopicsManager(configuration, kafkaPropertiesProvider);
+        this.activeWorkersMonitor = new ActiveWorkersMonitor();
         this.producerProperties = kafkaPropertiesProvider.getProducerProperties();
         this.pollBatchSize = configuration.getIntProperty("conductor.kafka.workers.listener.poll.batch.size", 30);
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.workers.listener.thread.pool", 30));
@@ -50,7 +52,7 @@ public class WorkersTaskStreamFactory {
         Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
 
         // When the first instance of a service is registered, create and start the worker task stream
-        if (activeWorkers.get(worker) == 1){
+         if (activeWorkersMonitor.getTotalInstances(worker) == 1){
             createWorkerTaskStream(worker, taskDef.getName(), topics);
         }
         // Return topics to service
@@ -67,7 +69,7 @@ public class WorkersTaskStreamFactory {
     private void createWorkerTaskStream(final String workerName, final String taskName, final Map<String, String> topics){
         Properties responseStreamProperties =kafkaPropertiesProvider.getStreamsProperties("response-" + workerName);
         threadPool.execute(new WorkerTasksStream(resourceHandler, responseStreamProperties, producerProperties,
-                activeWorkers, workerName, taskName, topics, pollBatchSize));
+                activeWorkersMonitor, workerName, taskName, topics, pollBatchSize));
 
     }
 
@@ -83,20 +85,12 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Add the name of an active worker to the active workers collection and
-     * set the number of instances of a worker currently running.
+     * Add the name of an active worker to the active workers collection
      *
-     * This assist with Conductor knowing when a particular service is no longer
-     * running (communicating with Conductor) so that thread (Worker Task Stream) can be closed
      * @param worker The unique (key) service name
      */
     private void addActiveWorker(final String worker) {
-        if (!activeWorkers.containsKey(worker)) {
-            activeWorkers.put(worker, 1);
-        } else {
-            int frequency = activeWorkers.get(worker) + 1;
-            activeWorkers.put(worker, frequency);
-        }
+        activeWorkersMonitor.addActiveWorker(worker);
     }
 
     /**
@@ -110,14 +104,5 @@ public class WorkersTaskStreamFactory {
         topics.put("updateTopic", worker + "-" + UPDATE_TOPIC);
         topics.put("statusTopic", worker + "-" + STATUS_TOPIC);
         return topics;
-    }
-
-    /**
-     * Removes an inactive service from the active workers collection
-     *
-     * @param workerName The name of the worker
-     */
-    private void removeInActiveWorker(String workerName){
-        activeWorkers.remove(workerName);
     }
 }

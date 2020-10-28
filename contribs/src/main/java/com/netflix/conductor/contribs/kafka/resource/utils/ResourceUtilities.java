@@ -1,4 +1,4 @@
-package com.netflix.conductor.contribs.kafka.resource.handlers;
+package com.netflix.conductor.contribs.kafka.resource.utils;
 
 
 /**

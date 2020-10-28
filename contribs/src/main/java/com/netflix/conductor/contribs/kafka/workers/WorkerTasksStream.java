@@ -1,8 +1,10 @@
-package com.netflix.conductor.contribs.kafka.model;
+package com.netflix.conductor.contribs.kafka.workers;
 
 import com.google.gson.Gson;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.utils.JsonMapperProvider;
+import com.netflix.conductor.contribs.kafka.model.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.RequestContainerSerde;
@@ -39,7 +41,7 @@ public class WorkerTasksStream implements Runnable {
     private final Properties responseStreamProperties;
     private final ResourceHandler resourceHandler;
     private final ExecutorService taskPublishPool;
-    private final Map<String, Integer> activeWorkers;
+    private final ActiveWorkersMonitor activeWorkersMonitor;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -54,7 +56,7 @@ public class WorkerTasksStream implements Runnable {
 
 
     public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties responseStreamProperties,
-                             final Properties producerProperties, final Map<String, Integer>activeWorkers,
+                             final Properties producerProperties, final ActiveWorkersMonitor activeWorkersMonitor,
                              final String worker, final String taskName, final Map<String, String> topics,
                              final int pollBatchSize){
         this.resourceHandler = resourceHandler;
@@ -64,7 +66,7 @@ public class WorkerTasksStream implements Runnable {
         this.updateTopic = topics.get("updateTopic");
         this.statusTopic = topics.get("statusTopic");
         this.responseStreamProperties = responseStreamProperties;
-        this.activeWorkers = activeWorkers;
+        this.activeWorkersMonitor = activeWorkersMonitor;
         this.gson = new Gson();
         this.requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
         this.responseContainerSerde = new ResponseContainerSerde();
@@ -140,7 +142,7 @@ public class WorkerTasksStream implements Runnable {
      */
     @SuppressWarnings("unchecked")
     private void pollAndPublish(){
-        while (activeWorkers.containsKey(worker)) {
+        while (activeWorkersMonitor.isActive(worker)) {
             ResponseContainer responseContainer = batchPollTasks();
             List<Task> batchTasks = (List<Task>) responseContainer.getResponseEntity();
             if (batchTasks != null && !batchTasks.isEmpty()){
