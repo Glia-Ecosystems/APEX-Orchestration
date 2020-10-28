@@ -87,7 +87,7 @@ public class ActiveWorkersMonitor {
          *
          * @return
          */
-        private long getLastHeartbeat() {
+        public long getLastHeartbeat() {
             return lastHeartbeat;
         }
 
@@ -95,14 +95,14 @@ public class ActiveWorkersMonitor {
          *
          * @param lastHeartbeat
          */
-        private void setLastHeartbeat(final long lastHeartbeat) {
+        public void setLastHeartbeat(final long lastHeartbeat) {
             this.lastHeartbeat = lastHeartbeat;
         }
 
         /**
          * Increase the num of instances by one
          */
-        private void incrementNumOfInstances(){
+        public void incrementNumOfInstances(){
             numOfInstances++;
         }
 
@@ -110,11 +110,11 @@ public class ActiveWorkersMonitor {
          *
          * @return
          */
-        private int getNumOfInstances(){
+        public int getNumOfInstances(){
             return numOfInstances;
         }
 
-        private void setNumOfInstances(int numOfInstances) {
+        public void setNumOfInstances(int numOfInstances) {
             this.numOfInstances = numOfInstances;
         }
     }
