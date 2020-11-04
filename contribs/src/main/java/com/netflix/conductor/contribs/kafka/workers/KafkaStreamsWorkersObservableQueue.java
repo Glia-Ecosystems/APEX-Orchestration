@@ -2,6 +2,8 @@ package com.netflix.conductor.contribs.kafka.workers;
 
 import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
+import com.netflix.conductor.contribs.kafka.model.HeartbeatCoordinator;
+import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
@@ -38,7 +40,9 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     private final Properties streamsProperties;
     private final String registerWorkersConsumerTopic;
     private final String registerWorkersProducerTopic;
+    private final KafkaTopicsManager kafkaTopicsManager;
     private final HeartbeatCoordinator heartbeatCoordinator;
+    private final ActiveWorkersMonitor activeWorkersMonitor;
     private final WorkersTaskStreamFactory workersTaskStreamFactory;
 
     @Inject
@@ -52,9 +56,11 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
         this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register");
-        this.heartbeatCoordinator = new HeartbeatCoordinator(configuration, kafkaPropertiesProvider);
-        this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider,
-                resourceHandler, new JsonMapperProvider().get());
+        this.kafkaTopicsManager = new KafkaTopicsManager(configuration, kafkaPropertiesProvider);
+        this.heartbeatCoordinator = new HeartbeatCoordinator(configuration, kafkaPropertiesProvider, kafkaTopicsManager);
+        this.activeWorkersMonitor = new ActiveWorkersMonitor(configuration, kafkaPropertiesProvider);
+        this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider, activeWorkersMonitor,
+                kafkaTopicsManager, resourceHandler, new JsonMapperProvider().get());
     }
 
     /**
@@ -264,10 +270,13 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     }
 
     /**
-     * Clean stop of the heartbeat thread
+     * Clean stop of the threads running to assist with processing tasks between Conductor
+     * and Workers
      */
     private void cleanUp(){
         heartbeatCoordinator.stopHeartbeat();
+        activeWorkersMonitor.closeInActiveWorkerMonitor();
+        kafkaTopicsManager.close();
     }
 
     /**

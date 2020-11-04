@@ -1,4 +1,4 @@
-package com.netflix.conductor.contribs.kafka.workers;
+package com.netflix.conductor.contribs.kafka.model;
 
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.core.config.Configuration;
@@ -13,8 +13,9 @@ public class HeartbeatCoordinator {
     private final Logger logger = LoggerFactory.getLogger(HeartbeatCoordinator.class);
     private final Timer timer = new Timer();
 
-    public HeartbeatCoordinator(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider){
-        TimerTask heartbeat = new Heartbeat(kafkaPropertiesProvider);
+    public HeartbeatCoordinator(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider,
+                                final KafkaTopicsManager kafkaTopicsManager){
+        TimerTask heartbeat = new Heartbeat(configuration, kafkaPropertiesProvider, kafkaTopicsManager);
         startHeartbeat(heartbeat, configuration.getLongProperty("heartbeat.interval.ms", 60000));
     }
 
@@ -26,6 +27,7 @@ public class HeartbeatCoordinator {
      */
     public void startHeartbeat(final TimerTask heartbeat, final long heartbeatIntervalMs){
         logger.info("Starting heartbeat");
+        // 45 secs delay before the first heartbeat is sent
         timer.scheduleAtFixedRate(heartbeat, 45000, heartbeatIntervalMs);
     }
 
