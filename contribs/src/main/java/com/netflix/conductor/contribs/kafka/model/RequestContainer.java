@@ -61,18 +61,34 @@ public class RequestContainer {
         return requestData;
     }
 
+    /**
+     *
+     * @return
+     */
     public boolean isDeserializationErrorOccurred() {
         return deserializationErrorOccurred;
     }
 
+    /**
+     *
+     * @param deserializationErrorOccurred
+     */
     public void setDeserializationErrorOccurred(boolean deserializationErrorOccurred) {
         this.deserializationErrorOccurred = deserializationErrorOccurred;
     }
 
+    /**
+     *
+     * @return
+     */
     public String getDeserializationError() {
         return deserializationError;
     }
 
+    /**
+     *
+     * @param deserializationError
+     */
     public void setDeserializationError(String deserializationError) {
         this.deserializationError = deserializationError;
     }

@@ -26,8 +26,6 @@ public class KafkaTopicsManager {
         this.numOfPartitions = configuration.getIntProperty("conductor.kafka.admin.num.of.partitions", 3);
         this.numOfReplications = (short) configuration.getIntProperty("conductor.kafka.admin.num.of.replications", 1);
         adminClient = AdminClient.create(kafkaPropertiesProvider.getAdminProperties());
-        // Add shutdown hook to respond to SIGTERM and gracefully close the Admin application.
-        Runtime.getRuntime().addShutdownHook(new Thread(this::close));
     }
 
     /**
@@ -37,7 +35,7 @@ public class KafkaTopicsManager {
      *
      * @param topicName The unique name of a topic to be created in Kafka.
      */
-    public synchronized void createTopic(final String topicName) {
+    public void createTopic(final String topicName) {
         try {
             if (!topicExists(topicName)) {
                 final NewTopic aTopic = new NewTopic(topicName, numOfPartitions, numOfReplications);
@@ -60,7 +58,7 @@ public class KafkaTopicsManager {
      *
      * @param topics A list containing the unique names of topics to be created in Kafka.
      */
-    public synchronized void createTopics(final List<String> topics) {
+    public void createTopics(final List<String> topics) {
         try {
             List<String> topicsNotExist = topicExists(topics);
             if (!topicsNotExist.isEmpty()) {
@@ -140,7 +138,7 @@ public class KafkaTopicsManager {
     /**
      * Closes connection to Kafka Admin API on Kafka cluster.
      */
-    private synchronized void close() {
+    public void close() {
         try {
             logger.info("KafkaTopicManager.close() cleaning up topics and consumer groups");
             adminClient.close();

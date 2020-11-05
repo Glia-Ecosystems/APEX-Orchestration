@@ -27,12 +27,13 @@ public class WorkersTaskStreamFactory {
     private final ObjectMapper objectMapper;
 
     public WorkersTaskStreamFactory(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider,
+                                    final ActiveWorkersMonitor activeWorkersMonitor, final KafkaTopicsManager kafkaTopicsManager,
                                     final ResourceHandler resourceHandler, final ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
         this.resourceHandler = resourceHandler;
         this.kafkaPropertiesProvider = kafkaPropertiesProvider;
-        this.kafkaTopicManager = new KafkaTopicsManager(configuration, kafkaPropertiesProvider);
-        this.activeWorkersMonitor = new ActiveWorkersMonitor();
+        this.kafkaTopicManager = kafkaTopicsManager;
+        this.activeWorkersMonitor = activeWorkersMonitor;
         this.producerProperties = kafkaPropertiesProvider.getProducerProperties();
         this.pollBatchSize = configuration.getIntProperty("conductor.kafka.workers.listener.poll.batch.size", 30);
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.workers.listener.thread.pool", 30));
@@ -67,7 +68,7 @@ public class WorkersTaskStreamFactory {
      * @param topics A list of topics used for Conductor and service to communicate
      */
     private void createWorkerTaskStream(final String workerName, final String taskName, final Map<String, String> topics){
-        Properties responseStreamProperties =kafkaPropertiesProvider.getStreamsProperties("response-" + workerName);
+        Properties responseStreamProperties = kafkaPropertiesProvider.getStreamsProperties("response-" + workerName);
         threadPool.execute(new WorkerTasksStream(resourceHandler, responseStreamProperties, producerProperties,
                 activeWorkersMonitor, workerName, taskName, topics, pollBatchSize));
 
