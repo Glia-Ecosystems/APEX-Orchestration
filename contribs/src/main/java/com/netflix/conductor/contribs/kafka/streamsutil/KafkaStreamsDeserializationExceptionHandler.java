@@ -57,4 +57,19 @@ public class KafkaStreamsDeserializationExceptionHandler extends LogAndContinueE
         response.setResponseErrorMessage(requestContainer.getDeserializationError());
         return response;
     }
+
+    /***
+     * Process the unique Kafka Streams topic URI exception into a response container to be return to the client who
+     * made the request
+     * @param requestContainer Contains all the needed information for processing the request
+     * @return Response of the exception that occurred for client
+     */
+    public static ResponseContainer processUniqueURIError(RequestContainer requestContainer){
+        // Create a request and response container
+        final ResponseContainer response = new ResponseContainer(requestContainer);
+        response.setStatus(400);
+        response.setResponseEntity(Response.Status.BAD_REQUEST);
+        response.setResponseErrorMessage("URI requested is not allowed for this Kafka Stream Topic");
+        return response;
+    }
 }

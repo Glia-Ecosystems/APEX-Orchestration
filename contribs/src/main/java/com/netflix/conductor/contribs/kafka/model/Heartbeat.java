@@ -33,7 +33,7 @@ public class Heartbeat extends TimerTask {
      */
     private String getHeartbeatTopic(final Configuration configuration, final KafkaTopicsManager kafkaTopicsManager){
         String topic = configuration.getProperty("heartbeat.topic", "");
-        if (topic == null){
+        if (topic.equals("")){
             logger.error("Configuration missing heartbeat topic.");
             throw new IllegalArgumentException("Configuration missing heartbeat topic..");
         }

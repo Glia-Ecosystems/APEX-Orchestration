@@ -33,6 +33,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
+ * This class is the main class for processing client requests to Orchestrator using Kafka Streams
+ *
  * Reads the properties with prefix 'kafka.streams.', and 'kafka.' from the
  * provided configuration. Initializes kafka streams based on the given value. Topics are provided
  * from the configuration. It is assumed that the topics provided is already configured in
@@ -50,8 +52,8 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsObservableQueue.class);
     private static final String QUEUE_TYPE = "kafkaStreams";
     private static final int KEY_ERROR_BRANCH = 0;
-    private static final int EXECUTE_BRANCH = 1;
-    private static final int VALUE_ERROR_BRANCH = 2;
+    private static final int VALUE_ERROR_BRANCH = 1;
+    private static final int EXECUTE_BRANCH = 2;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -81,7 +83,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         this.apexRequestsTopic = requestTopic;
         this.apexResponsesTopic = responseTopic;
         this.resourceHandler = resourceHandler;
-        this.requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+        this.requestContainerSerde = new RequestContainerSerde();
         this.responseContainerSerde = new ResponseContainerSerde();
         this.objectMapper = new JsonMapperProvider().get();
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.listener.thread.pool", 20));
@@ -103,24 +105,24 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         // Source Node (Responsible for consuming the records from a given topic, that will be processed)
         final KStream<String, RequestContainer> requestStream = builder.stream(apexRequestsTopic,
                 Consumed.with(Serdes.String(), requestContainerSerde))
-                .peek((k, v) -> logger.info("Received record. Client: {} Request: {}", k, v));
+                .peek((k, v) -> logger.info("Received record. Client: {}", k));
         // Branch Processor Node
         // Each record is matched against the given predicates in the order that they're provided.
         // The branch processor will assign records to a stream on the first match.
         // WARNING: No attempts are made to match additional predicates.
         // If a no key given error occurs, send error to client who made initial request
         final Predicate<String, RequestContainer> keyError = (clientId, request) -> clientId.isEmpty();
-        // If no errors occurred during deserialization, process request further
-        final Predicate<String, RequestContainer> readyToProcess = (clientId, request) -> !request.isDeserializationErrorOccurred();
         // If a value error occurred, send error to client who made initial request
         final Predicate<String, RequestContainer> isError = (clientId, request) -> request.isDeserializationErrorOccurred();
-        final KStream<String, RequestContainer>[] executeDept = requestStream.branch(keyError, readyToProcess, isError);
+        // If no errors occurred during deserialization, process request further
+        final Predicate<String, RequestContainer> readyToProcess = (clientId, request) -> !request.isDeserializationErrorOccurred();
+        final KStream<String, RequestContainer>[] executeDept = requestStream.branch(keyError, isError, readyToProcess);
         // Child Node - Process no key given error
         final KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
-        // Child Node - Execute Request to Conductor API and receive response
-        final KStream<String, ResponseContainer> processedRequest = executeDept[EXECUTE_BRANCH].mapValues(resourceHandler::processRequest);
         // Child Node - Process value error
         final KStream<String, ResponseContainer> processedError = executeDept[VALUE_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
+        // Child Node - Execute Request to Conductor API and receive response
+        final KStream<String, ResponseContainer> processedRequest = executeDept[EXECUTE_BRANCH].mapValues(resourceHandler::processRequest);
         // Sink Node - Send Key Error to client
         processedKeyError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Sink Node - Send Response to client
@@ -186,7 +188,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         // Thread.sleep function is executed so that the kafka stream processing of requests are not sent
         // to Conductor before the server is started
         try {
-            Thread.sleep(45000); // 45 secs thread sleep
+            Thread.sleep(50000); // 50 secs thread sleep
         } catch (final InterruptedException e) {
             // Restores the interrupt by the InterruptedException so that caller can see that
             // interrupt has occurred.

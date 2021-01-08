@@ -2,7 +2,6 @@ package com.netflix.conductor.contribs.kafka.workers;
 
 import com.google.gson.Gson;
 import com.netflix.conductor.common.metadata.tasks.Task;
-import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
@@ -68,7 +67,7 @@ public class WorkerTasksStream implements Runnable {
         this.responseStreamProperties = responseStreamProperties;
         this.activeWorkersMonitor = activeWorkersMonitor;
         this.gson = new Gson();
-        this.requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+        this.requestContainerSerde = new RequestContainerSerde();
         this.responseContainerSerde = new ResponseContainerSerde();
         this.producer = new KafkaProducer<>(producerProperties);
         this.pollBatchSize = pollBatchSize;

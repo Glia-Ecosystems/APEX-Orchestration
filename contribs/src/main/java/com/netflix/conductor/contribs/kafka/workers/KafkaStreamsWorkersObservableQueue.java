@@ -29,8 +29,9 @@ import java.util.*;
 public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsWorkersObservableQueue.class);
     private static final int KEY_ERROR_BRANCH = 0;
-    private static final int REGISTER_BRANCH = 1;
-    private static final int VALUE_ERROR_BRANCH = 2;
+    private static final int VALUE_ERROR_BRANCH = 1;
+    private static final int UNIQUE_URI_ERROR_BRANCH = 2;
+    private static final int REGISTER_BRANCH = 3;
     private static final int REGISTRATION_SUCCESS_BRANCH = 0;
     private static final int REGISTRATION_UNSUCCESSFUL_BRANCH = 1;
     // Create custom Serde objects for processing records
@@ -47,18 +48,19 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
 
     @Inject
     public KafkaStreamsWorkersObservableQueue(final ResourceHandler resourceHandler, final Configuration configuration,
+                                              final KafkaTopicsManager kafkaTopicsManager,
                                               final KafkaPropertiesProvider kafkaPropertiesProvider,
                                               final String registerWorkersConsumerTopic,
                                               final String registerWorkersProducerTopic) {
         this.resourceHandler = resourceHandler;
-        this.requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+        this.kafkaTopicsManager = new KafkaTopicsManager(configuration, kafkaPropertiesProvider);
+        this.requestContainerSerde = new RequestContainerSerde();
         this.responseContainerSerde = new ResponseContainerSerde();
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
         this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register");
-        this.kafkaTopicsManager = new KafkaTopicsManager(configuration, kafkaPropertiesProvider);
         this.heartbeatCoordinator = new HeartbeatCoordinator(configuration, kafkaPropertiesProvider, kafkaTopicsManager);
-        this.activeWorkersMonitor = new ActiveWorkersMonitor(configuration, kafkaPropertiesProvider);
+        this.activeWorkersMonitor = new ActiveWorkersMonitor(configuration, kafkaTopicsManager, resourceHandler, kafkaPropertiesProvider);
         this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider, activeWorkersMonitor,
                 kafkaTopicsManager, resourceHandler, new JsonMapperProvider().get());
     }
@@ -88,18 +90,23 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         // Filters processing of request, if any key or value errors occur when containerising request
         // send error to service, else process request
         Predicate<String, RequestContainer> keyError = (serviceName, request) -> serviceName.isEmpty();
-        Predicate<String, RequestContainer> readyToRegister = (serviceName, request) -> !request.isDeserializationErrorOccurred();
         Predicate<String, RequestContainer> errorOccurred = (serviceName, request) -> request.isDeserializationErrorOccurred();
-        KStream<String, RequestContainer>[] executeDept = registerStream.branch(keyError, readyToRegister, errorOccurred);
+        // If the URI sent is not an expected URI for this topic, send error to client who made initial request to topic
+        Predicate<String, RequestContainer> uniqueURIError = (clientId, request) -> !request.getResourceURI().contains("/metadata/taskdefs");
+        Predicate<String, RequestContainer> readyToRegister = (serviceName, request) -> !request.isDeserializationErrorOccurred();
+        KStream<String, RequestContainer>[] executeDept = registerStream.branch(keyError, errorOccurred, uniqueURIError, readyToRegister);
         KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH]
                 .mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
-        KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[REGISTER_BRANCH]
-                .mapValues(resourceHandler::processRequest);
         KStream<String, ResponseContainer> processedValueError = executeDept[VALUE_ERROR_BRANCH]
                 .mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
+        KStream<String, ResponseContainer> processedURIError = executeDept[UNIQUE_URI_ERROR_BRANCH]
+                .mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
+        KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[REGISTER_BRANCH]
+                .mapValues(resourceHandler::processRequest);
         // If key or value error occurred, return error to service
         processedKeyError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedURIError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Branch Processor Node
         // Filters the response from Conductor relating to the registration of the service task definition requested.
         // If success, start worker task stream and return kafka topics for processing tasks
@@ -287,10 +294,10 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     public void run() {
         try {
             startRegisterWorkerStream();
+            // Add shutdown hook to respond to SIGTERM and gracefully close all applications upon shutdown.
+            Runtime.getRuntime().addShutdownHook(new Thread(this::cleanUp));
         } catch (final Exception e) {
             logger.error("KafkaStreamsWorkersObservableQueue.startStream(), exiting due to error! %s", e.getCause());
-        } finally {
-            cleanUp();
         }
     }
 }
