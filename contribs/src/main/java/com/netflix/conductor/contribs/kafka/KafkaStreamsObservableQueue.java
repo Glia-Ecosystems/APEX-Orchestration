@@ -51,9 +51,6 @@ import java.util.concurrent.Executors;
 public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsObservableQueue.class);
     private static final String QUEUE_TYPE = "kafkaStreams";
-    private static final int KEY_ERROR_BRANCH = 0;
-    private static final int VALUE_ERROR_BRANCH = 1;
-    private static final int EXECUTE_BRANCH = 2;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
     private final ResponseContainerSerde responseContainerSerde;
@@ -65,6 +62,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     private final ResourceHandler resourceHandler;
     private final KafkaProducer<String, String> producer;
     private final ExecutorService threadPool;
+    private final Long startupTreadSleep;
 
     /**
      * Constructor of the KafkaStreamsObservableQueue for using kafka streams processing
@@ -83,6 +81,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         this.apexRequestsTopic = requestTopic;
         this.apexResponsesTopic = responseTopic;
         this.resourceHandler = resourceHandler;
+        this.startupTreadSleep = configuration.getLongProperty("conductor.kafka.listener.startup.thread.sleep", 50000);
         this.requestContainerSerde = new RequestContainerSerde();
         this.responseContainerSerde = new ResponseContainerSerde();
         this.objectMapper = new JsonMapperProvider().get();
@@ -111,6 +110,8 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         // The branch processor will assign records to a stream on the first match.
         // WARNING: No attempts are made to match additional predicates.
         // If a no key given error occurs, send error to client who made initial request
+        // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
+        // if predicate is true.
         final Predicate<String, RequestContainer> keyError = (clientId, request) -> clientId.isEmpty();
         // If a value error occurred, send error to client who made initial request
         final Predicate<String, RequestContainer> isError = (clientId, request) -> request.isDeserializationErrorOccurred();
@@ -118,11 +119,11 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         final Predicate<String, RequestContainer> readyToProcess = (clientId, request) -> !request.isDeserializationErrorOccurred();
         final KStream<String, RequestContainer>[] executeDept = requestStream.branch(keyError, isError, readyToProcess);
         // Child Node - Process no key given error
-        final KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
+        final KStream<String, ResponseContainer> processedKeyError = executeDept[0].mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
         // Child Node - Process value error
-        final KStream<String, ResponseContainer> processedError = executeDept[VALUE_ERROR_BRANCH].mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
+        final KStream<String, ResponseContainer> processedError = executeDept[1].mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
         // Child Node - Execute Request to Conductor API and receive response
-        final KStream<String, ResponseContainer> processedRequest = executeDept[EXECUTE_BRANCH].mapValues(resourceHandler::processRequest);
+        final KStream<String, ResponseContainer> processedRequest = executeDept[2].mapValues(resourceHandler::processRequest);
         // Sink Node - Send Key Error to client
         processedKeyError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Sink Node - Send Response to client
@@ -188,7 +189,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         // Thread.sleep function is executed so that the kafka stream processing of requests are not sent
         // to Conductor before the server is started
         try {
-            Thread.sleep(50000); // 50 secs thread sleep
+            Thread.sleep(startupTreadSleep);
         } catch (final InterruptedException e) {
             // Restores the interrupt by the InterruptedException so that caller can see that
             // interrupt has occurred.

@@ -22,9 +22,6 @@ import java.util.*;
 public class ActiveWorkersMonitor {
 
     private final Logger logger = LoggerFactory.getLogger(ActiveWorkersMonitor.class);
-    private static final int KEY_ERROR_BRANCH = 0;
-    private static final int PROCESS_HEARTBEAT_BRANCH = 1;
-    private static final int HEARTBEAT_ERROR_BRANCH = 2;
     private boolean inactiveWorkerMonitorRunning = false;
     private final Set<String> activeWorkers;
     private final Map<String, Status> workersStatus;
@@ -200,14 +197,15 @@ public class ActiveWorkersMonitor {
         // If a no key given error occurs, send error to client who made initial request
         // Filters processing of request, if any key or value errors occur when containerising request
         // send error to service, else process request
+        // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
+        // if predicate is true.
         Predicate<String, WorkerHeartbeat> keyError = (serviceName, heartbeat) -> serviceName.isEmpty();
         Predicate<String, WorkerHeartbeat> errorOccurred = (serviceName, heartbeat) -> heartbeat.isDeserializationErrorOccurred();
         Predicate<String, WorkerHeartbeat> processHeartbeatReceived = (serviceName, heartbeat) -> !heartbeat.isDeserializationErrorOccurred();
-        KStream<String, WorkerHeartbeat>[] executeDept = statusStream.branch(keyError, processHeartbeatReceived,
-                errorOccurred);
-        executeDept[KEY_ERROR_BRANCH].foreach((k, v) -> logger.debug(v.getDeserializationError()));
-        executeDept[PROCESS_HEARTBEAT_BRANCH].foreach(this::receivedHeartbeat);
-        executeDept[HEARTBEAT_ERROR_BRANCH].foreach((k, v) -> logger.debug(v.getDeserializationError()));
+        KStream<String, WorkerHeartbeat>[] executeDept = statusStream.branch(keyError, errorOccurred, processHeartbeatReceived);
+        executeDept[0].foreach((k, v) -> logger.debug(v.getDeserializationError()));
+        executeDept[1].foreach((k, v) -> logger.debug(v.getDeserializationError()));
+        executeDept[2].foreach(this::receivedHeartbeat);
         return builder.build();
     }
 
