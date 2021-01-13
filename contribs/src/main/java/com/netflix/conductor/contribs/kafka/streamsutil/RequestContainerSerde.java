@@ -1,8 +1,7 @@
 package com.netflix.conductor.contribs.kafka.streamsutil;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
@@ -10,6 +9,7 @@ import org.apache.kafka.common.serialization.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Type;
 import java.util.Map;
 
 /**
@@ -20,11 +20,13 @@ import java.util.Map;
 public class RequestContainerSerde implements Serde<RequestContainer> {
 
     private static final Logger logger = LoggerFactory.getLogger(RequestContainerSerde.class);
-    private final ObjectMapper objectMapper;
     private String errorMessage;
+    private final Gson gson;
+    private final Type objectMapType;
 
-    public RequestContainerSerde (final ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    public RequestContainerSerde () {
+        this.gson = new Gson();
+        this.objectMapType = new TypeToken<Map<String, ?>>() {}.getType();
     }
 
     /**
@@ -78,7 +80,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
             @Override
             public RequestContainer deserialize(final String topic, final byte[] dataRecord) {
                 errorMessage = "";
-                final Map<String, ?> request = jsonStringToMap(new String(dataRecord));
+                final Map<String, ?> request = gson.fromJson(new String(dataRecord), objectMapType);
                 // Verify if record is null
                 if (request == null){
                     // If record sent is null
@@ -147,22 +149,5 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
             return true;
         }
         return false;
-    }
-
-    /**
-     * Converts a Json string to a Map object
-     *
-     * @param payload The client request retrieved from Kafka
-     * @return Map object of the client request
-     */
-    private Map<String, Object> jsonStringToMap(final String payload) {
-        Map<String, Object> message = null;
-        try {
-            message = objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {
-            });
-        } catch (final JsonProcessingException e) {
-            logger.error("Error converting deserialize json to map. {}", e.getMessage());
-        }
-        return message;
     }
 }

@@ -2,7 +2,6 @@ package com.netflix.conductor.contribs.kafka.workers;
 
 import com.google.gson.Gson;
 import com.netflix.conductor.common.metadata.tasks.Task;
-import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
@@ -34,9 +33,6 @@ import java.util.concurrent.Executors;
 public class WorkerTasksStream implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkerTasksStream.class);
-    private static final int KEY_ERROR_BRANCH = 0;
-    private static final int REGISTER_BRANCH = 1;
-    private static final int VALUE_ERROR_BRANCH = 2;
     private final KafkaProducer<String, String> producer;
     private final Properties responseStreamProperties;
     private final ResourceHandler resourceHandler;
@@ -68,7 +64,7 @@ public class WorkerTasksStream implements Runnable {
         this.responseStreamProperties = responseStreamProperties;
         this.activeWorkersMonitor = activeWorkersMonitor;
         this.gson = new Gson();
-        this.requestContainerSerde = new RequestContainerSerde(new JsonMapperProvider().get());
+        this.requestContainerSerde = new RequestContainerSerde();
         this.responseContainerSerde = new ResponseContainerSerde();
         this.producer = new KafkaProducer<>(producerProperties);
         this.pollBatchSize = pollBatchSize;
@@ -95,14 +91,15 @@ public class WorkerTasksStream implements Runnable {
                 !request.isDeserializationErrorOccurred();
         Predicate<String, RequestContainer> errorOccurred = (workerName, request) ->
                 request.isDeserializationErrorOccurred();
-        KStream<String, RequestContainer>[] executeDept = taskStream.branch(keyError, continueTaskStream,
-                errorOccurred);
-        KStream<String, ResponseContainer> processedKeyError = executeDept[KEY_ERROR_BRANCH].
+        // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
+        // if predicate is true.
+        KStream<String, RequestContainer>[] executeDept = taskStream.branch(keyError, errorOccurred, continueTaskStream);
+        KStream<String, ResponseContainer> processedKeyError = executeDept[0].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
-        KStream<String, ResponseContainer> processedTask = executeDept[REGISTER_BRANCH].
-                mapValues(resourceHandler::processRequest);
-        KStream<String, ResponseContainer> processedValueError = executeDept[VALUE_ERROR_BRANCH].
+        KStream<String, ResponseContainer> processedValueError = executeDept[1].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
+        KStream<String, ResponseContainer> processedTask = executeDept[2].
+                mapValues(resourceHandler::processRequest);
         processedTask.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedKeyError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedValueError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));

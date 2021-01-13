@@ -1,6 +1,10 @@
 package com.netflix.conductor.contribs.kafka.workers;
 
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
+import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
+import com.netflix.conductor.contribs.kafka.model.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.WorkerHeartbeatSerde;
 import com.netflix.conductor.core.config.Configuration;
 import org.apache.kafka.common.serialization.Serdes;
@@ -18,25 +22,24 @@ import java.util.*;
 public class ActiveWorkersMonitor {
 
     private final Logger logger = LoggerFactory.getLogger(ActiveWorkersMonitor.class);
-    private static final int KEY_ERROR_BRANCH = 0;
-    private static final int PROCESS_HEARTBEAT_BRANCH = 1;
-    private static final int HEARTBEAT_ERROR_BRANCH = 2;
     private boolean inactiveWorkerMonitorRunning = false;
     private final Set<String> activeWorkers;
     private final Map<String, Status> workersStatus;
     private final Properties statusListenerProperties;
     private final WorkerHeartbeatSerde workerHeartbeatSerde;
+    private final ResourceHandler resourceHandler;
     private final Timer timer;
     private final String workersHeartbeatTopic;
     private final long workerInactiveTimer;
 
-    public ActiveWorkersMonitor(final Configuration configuration,
-                                final KafkaPropertiesProvider kafkaPropertiesProvider){
+    public ActiveWorkersMonitor(final Configuration configuration,  final KafkaTopicsManager kafkaTopicsManager,
+                                final ResourceHandler resourceHandler, final KafkaPropertiesProvider kafkaPropertiesProvider){
+        this.resourceHandler = resourceHandler;
         this.activeWorkers = new LinkedHashSet<>();
         this.workersStatus = new HashMap<>();
         this.timer = new Timer();
         this.workerHeartbeatSerde = new WorkerHeartbeatSerde();
-        this.workersHeartbeatTopic = getWorkersHeartbeatTopic(configuration);
+        this.workersHeartbeatTopic = getWorkersHeartbeatTopic(configuration, kafkaTopicsManager);
         this.statusListenerProperties = kafkaPropertiesProvider.getStreamsProperties("status-listener");
         this.workerInactiveTimer = configuration.getLongProperty("worker.inactive.ms", 120000);
         startWorkersStatusListenerStream();
@@ -52,26 +55,38 @@ public class ActiveWorkersMonitor {
      *
      * @param worker The unique (key) service name
      */
-    public void addActiveWorker(final String worker) {
+    public void addActiveWorker(final String worker, final String taskName) {
         startInActiveWorkerMonitor();   // This function will be skipped if its already started
-        if (!activeWorkers.contains(worker)) {
-            activeWorkers.add(worker);
-            workersStatus.put(worker, new Status(workerInactiveTimer));
-        } else {
-            updateNumOfInstances(worker);
-        }
+        activeWorkers.add(worker);
+        workersStatus.put(worker, new Status(taskName, workerInactiveTimer));
+        logger.debug("Added {} worker to collection of Active Workers", worker);
     }
 
     /**
-     * Receives and process heartbeats received from services/workers
+     * Removes an inactive worker from status collections
      *
-     * @param worker The name of the worker
-     * @param workerHeartbeat Worker heartbeat object
+     * @param worker The service name
      */
-    private void receivedHeartbeat(final String worker, final WorkerHeartbeat workerHeartbeat){
-        if (activeWorkers.contains(worker)){
-            Status status = workersStatus.get(worker);
-            status.updateLastHeartbeat(workerHeartbeat.getHeartbeatTimeStampMS(), workerInactiveTimer);
+    public void removeInActiveWorker(final String worker){
+        unregisterWorker(workersStatus.get(worker).getTaskName());
+        activeWorkers.remove(worker);
+        workersStatus.remove(worker);
+        logger.debug("Removed inActive {} worker from collection of Active Workers", worker);
+    }
+
+    /**
+     * Makes a request to conductor to get a batch of tasks in the worker/service queue
+     *
+     * @param taskName The service task name
+     */
+    private void unregisterWorker(final String taskName){
+        String path = "/metadata/taskdefs/" + taskName;
+        ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer(path, "DELETE", ""));
+        if (responseContainer.getStatus() == 200){
+            logger.debug("Unregistered Task Definition: {}", taskName);
+        } else {
+            logger.debug("Error occurred unregistering task definition for {}. Error: {}",
+                    taskName, responseContainer.getResponseErrorMessage());
         }
     }
 
@@ -87,7 +102,39 @@ public class ActiveWorkersMonitor {
             }
         }
         if (activeWorkers.isEmpty()){
+            closeInActiveWorkerMonitor();
             inactiveWorkerMonitorRunning = false;
+        }
+    }
+
+    /**
+     * Starts the inactive worker monitor timer thread for frequently checking if a service is inactive
+     * (Have not sent a heartbeat within a specific timeframe)
+     */
+    private void startInActiveWorkerMonitor(){
+        if (!inactiveWorkerMonitorRunning){
+            TimerTask checkForInActiveWorkers = new TimerTask() {
+                @Override
+                public void run() {
+                    checkIfInActive();
+                }
+            };
+            timer.scheduleAtFixedRate(checkForInActiveWorkers, workerInactiveTimer, workerInactiveTimer);
+            inactiveWorkerMonitorRunning = true;
+        }
+    }
+
+    /**
+     * Receives and process heartbeats received from services/workers
+     *
+     * @param worker The name of the worker
+     * @param workerHeartbeat Worker heartbeat object
+     */
+    private void receivedHeartbeat(final String worker, final WorkerHeartbeat workerHeartbeat){
+        // Only consider workers/service that successfully registered themselves with Conductor
+        if (activeWorkers.contains(worker)){
+            Status status = workersStatus.get(worker);
+            status.updateLastHeartbeat(workerHeartbeat.getHeartbeatTimeStampMS(), workerInactiveTimer);
         }
     }
 
@@ -105,60 +152,11 @@ public class ActiveWorkersMonitor {
      * Checks if worker/service is inactive
      *
      * @param worker The service name
-     * @param lastHeartbeat The time of last heartbeat
-     * @return
+     * @param now Current time in milliseconds
+     * @return Indicator if a worker is inactive
      */
-    private boolean isInActive(final String worker, final long lastHeartbeat){
-        return lastHeartbeat >= workersStatus.get(worker).getTimeToNextHeartbeat();
-    }
-
-    /**
-     * Starts the inactive worker monitor timer thread for frequently checking if a service is inactive
-     * (Have not sent a heartbeat within a specific tomeframe)
-     */
-    private void startInActiveWorkerMonitor(){
-        if (!inactiveWorkerMonitorRunning){
-            TimerTask checkForInActiveWorkers = new TimerTask() {
-                @Override
-                public void run() {
-                    checkIfInActive();
-                }
-            };
-            timer.scheduleAtFixedRate(checkForInActiveWorkers, workerInactiveTimer, workerInactiveTimer);
-            inactiveWorkerMonitorRunning = true;
-        }
-    }
-
-    /**
-     * Get the number of instances for worker currently running
-     *
-     * @param worker The service name
-     * @return The total of instances currently running for given worker
-     */
-    public int getTotalInstances(final String worker){
-        if (isActive(worker)) {
-            return workersStatus.get(worker).getNumOfInstances();
-        }
-        return 0;
-    }
-
-    /**
-     * Update the number of instances running
-     *
-     * @param worker The service name
-     */
-    private void updateNumOfInstances(final String worker) {
-        workersStatus.get(worker).incrementNumOfInstances();
-    }
-
-    /**
-     * Removes an inactive worker from status collections
-     *
-     * @param worker The service name
-     */
-    public void removeInActiveWorker(final String worker){
-        activeWorkers.remove(worker);
-        workersStatus.remove(worker);
+    private boolean isInActive(final String worker, final long now){
+        return now >= workersStatus.get(worker).getTimeToNextHeartbeat();
     }
 
     /**
@@ -167,20 +165,14 @@ public class ActiveWorkersMonitor {
      * @param configuration Main configuration file for the Conductor application
      * @return Topic to subscribe for workers heartbeat signals
      */
-    private String getWorkersHeartbeatTopic(final Configuration configuration){
-        String topic = configuration.getProperty("worker.heartbeat.topic", "");
-        if (topic == null){
+    private String getWorkersHeartbeatTopic(final Configuration configuration, final KafkaTopicsManager kafkaTopicsManager){
+        String topic = configuration.getProperty("workers.heartbeat.topic", "");
+        if (topic.equals("")){
             logger.error("Configuration missing for worker heartbeat topic.");
             throw new IllegalArgumentException("Configuration missing for worker heartbeat topic..");
         }
+        kafkaTopicsManager.createTopic(topic);
         return topic;
-    }
-
-    /**
-     * Closes the inactive worker monitor timer thread
-     */
-    public void closeInActiveWorkerMonitor(){
-        timer.cancel();
     }
 
     /**
@@ -205,14 +197,15 @@ public class ActiveWorkersMonitor {
         // If a no key given error occurs, send error to client who made initial request
         // Filters processing of request, if any key or value errors occur when containerising request
         // send error to service, else process request
+        // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
+        // if predicate is true.
         Predicate<String, WorkerHeartbeat> keyError = (serviceName, heartbeat) -> serviceName.isEmpty();
         Predicate<String, WorkerHeartbeat> errorOccurred = (serviceName, heartbeat) -> heartbeat.isDeserializationErrorOccurred();
         Predicate<String, WorkerHeartbeat> processHeartbeatReceived = (serviceName, heartbeat) -> !heartbeat.isDeserializationErrorOccurred();
-        KStream<String, WorkerHeartbeat>[] executeDept = statusStream.branch(keyError, processHeartbeatReceived,
-                errorOccurred);
-        executeDept[KEY_ERROR_BRANCH].foreach((k, v) -> logger.debug(v.getDeserializationError()));
-        executeDept[PROCESS_HEARTBEAT_BRANCH].foreach(this::receivedHeartbeat);
-        executeDept[HEARTBEAT_ERROR_BRANCH].foreach((k, v) -> logger.debug(v.getDeserializationError()));
+        KStream<String, WorkerHeartbeat>[] executeDept = statusStream.branch(keyError, errorOccurred, processHeartbeatReceived);
+        executeDept[0].foreach((k, v) -> logger.debug(v.getDeserializationError()));
+        executeDept[1].foreach((k, v) -> logger.debug(v.getDeserializationError()));
+        executeDept[2].foreach(this::receivedHeartbeat);
         return builder.build();
     }
 
@@ -259,16 +252,25 @@ public class ActiveWorkersMonitor {
     }
 
     /**
+     * Closes the inactive worker monitor timer thread
+     */
+    public void closeInActiveWorkerMonitor(){
+        timer.cancel();
+    }
+
+    /**
      * A status object used to encapsulate the status of an active worker
      */
     private static class Status{
 
-        private long lastHeartbeat = Long.MIN_VALUE;
-        private long timeToNextHeartbeat = Long.MIN_VALUE;
-        private int numOfInstances = 1;
+        private final String taskName;
+        private long lastHeartbeat;
+        private long timeToNextHeartbeat;
 
-        public Status(final long workerInactive){
-            resetTimeToNextHeartbeat(lastHeartbeat, workerInactive);
+        public Status(final String taskName, final long workerInactive){
+            this.taskName = taskName;
+            this.lastHeartbeat = System.currentTimeMillis();
+            resetTimeToNextHeartbeat(workerInactive);
         }
 
         /**
@@ -278,12 +280,12 @@ public class ActiveWorkersMonitor {
          */
         public void updateLastHeartbeat(final long heartbeatMs, final long workerInactiveTimer){
             setLastHeartbeat(heartbeatMs);
-            resetTimeToNextHeartbeat(lastHeartbeat, workerInactiveTimer);
+            resetTimeToNextHeartbeat(workerInactiveTimer);
         }
 
         /**
          * Gets the time until heartbeat must be received from a worker/service to be considered active
-         * @return
+         * @return Time until next expected heartbeat
          */
         public long getTimeToNextHeartbeat() {
             return timeToNextHeartbeat;
@@ -291,35 +293,24 @@ public class ActiveWorkersMonitor {
 
         /**
          * Sets the time of the last heartbeat received
-         * @param lastHeartbeat
+         * @param receivedHeartbeatMs The received heartbeat from a worker
          */
-        public void setLastHeartbeat(final long lastHeartbeat) {
-            this.lastHeartbeat = lastHeartbeat;
+        public void setLastHeartbeat(final long receivedHeartbeatMs) {
+            this.lastHeartbeat = receivedHeartbeatMs;
         }
 
         /**
-         * Increase the num of instances by one
+         * Gets the task name of the service task definition
+         * @return The task name
          */
-        public void incrementNumOfInstances(){
-            numOfInstances++;
-        }
-
-        /**
-         * Gets thee total number of instances running
-         * @return
-         */
-        public int getNumOfInstances(){
-            return numOfInstances;
-        }
-
+        public String getTaskName() { return taskName; }
 
         /**
          * Resets the time until a heartbeat must be received from a worker/service to be considered active
-         * @param lastHeartbeat The time of heartbeat
          * @param workerInactiveTimer The specific length of time a heartbeat must be received from a worker/service to be considered active
          */
-        private void resetTimeToNextHeartbeat(final long lastHeartbeat, final long workerInactiveTimer){
-            this.timeToNextHeartbeat = lastHeartbeat + workerInactiveTimer;
+        private void resetTimeToNextHeartbeat(final long workerInactiveTimer){
+            this.timeToNextHeartbeat = this.lastHeartbeat + workerInactiveTimer;
         }
     }
 }

@@ -40,7 +40,7 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Creates or destroy a worker task stream object/thread
+     * Creates a worker task stream object/thread
      *
      * @param  worker The name of the worker
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
@@ -49,12 +49,12 @@ public class WorkersTaskStreamFactory {
         Map<String, Object> request = responseContainer.getRequest();
         ArrayList<?> entity = (ArrayList<?>) request.get("entity");
         TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
-        addActiveWorker(worker);  // Adds worker to active workers collection
         Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
 
         // When the first instance of a service is registered, create and start the worker task stream
-         if (activeWorkersMonitor.getTotalInstances(worker) == 1){
-            createWorkerTaskStream(worker, taskDef.getName(), topics);
+        if (!activeWorkersMonitor.isActive(worker)){
+            activeWorkersMonitor.addActiveWorker(worker, taskDef.getName());  // Adds worker to active workers collection
+            startWorkerTaskStream(worker, taskDef.getName(), topics);
         }
         // Return topics to service
         responseContainer.setResponseEntity(topics);
@@ -62,12 +62,12 @@ public class WorkersTaskStreamFactory {
     }
 
     /**
-     * Creates a worker task stream for processing tasks between Conductor and the respective service
+     * Starts a worker task stream for processing tasks between Conductor and the respective service
      * @param workerName The unique service name
      * @param taskName The name of the task definition
      * @param topics A list of topics used for Conductor and service to communicate
      */
-    private void createWorkerTaskStream(final String workerName, final String taskName, final Map<String, String> topics){
+    private void startWorkerTaskStream(final String workerName, final String taskName, final Map<String, String> topics){
         Properties responseStreamProperties = kafkaPropertiesProvider.getStreamsProperties("response-" + workerName);
         threadPool.execute(new WorkerTasksStream(resourceHandler, responseStreamProperties, producerProperties,
                 activeWorkersMonitor, workerName, taskName, topics, pollBatchSize));
@@ -83,15 +83,6 @@ public class WorkersTaskStreamFactory {
         Map<String, String> topics = generateServiceTopics(worker);
         kafkaTopicManager.createTopics(new ArrayList<>(topics.values()));
         return topics;
-    }
-
-    /**
-     * Add the name of an active worker to the active workers collection
-     *
-     * @param worker The unique (key) service name
-     */
-    private void addActiveWorker(final String worker) {
-        activeWorkersMonitor.addActiveWorker(worker);
     }
 
     /**

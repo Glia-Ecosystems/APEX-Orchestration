@@ -96,7 +96,7 @@ public class KafkaTopicsManager {
     }
 
     /**
-     * Check if the topic exists
+     * Check if the topic exist
      *
      * @param topic the topic name
      * @return true/false if the topic exists
