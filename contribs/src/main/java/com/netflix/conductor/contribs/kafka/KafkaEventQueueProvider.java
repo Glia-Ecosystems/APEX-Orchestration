@@ -80,8 +80,8 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
      * @param resourceHandler  Main class for accessing resource classes of Conductor
      */
     public void startKafkaListener(final ResourceHandler resourceHandler, final KafkaTopicsManager kafkaTopicsManager) {
-        final String consumerTopic = config.getProperty("kafka.consumer.listener.topic", "");
-        final String producerTopic = config.getProperty("kafka.producer.listener.topic", "");
+        final String consumerTopic = config.getProperty("conductor.kafka.consumer.listener.topic", "");
+        final String producerTopic = config.getProperty("conductor.kafka.producer.listener.topic", "");
         if (consumerTopic.isEmpty() && producerTopic.isEmpty()) {
             logger.error("Configuration missing for Kafka Consumer and/or Producer topics.");
             throw new IllegalArgumentException("Configuration missing for Kafka Consumer and/or Producer topics.");
@@ -104,8 +104,8 @@ public class KafkaEventQueueProvider implements EventQueueProvider {
      * @param resourceHandler Main class for accessing resource classes of Conductor
      */
     public void startKafkaWorkersListener(final ResourceHandler resourceHandler, final KafkaTopicsManager kafkaTopicsManager){
-        final String registerWorkersConsumerTopic = config.getProperty("kafka.streams.workers.consumer.listener.topic", "");
-        final String registerWorkersProducerTopic = config.getProperty("kafka.streams.workers.producer.listener.topic", "");
+        final String registerWorkersConsumerTopic = config.getProperty("conductor.kafka.streams.workers.consumer.listener.topic", "");
+        final String registerWorkersProducerTopic = config.getProperty("conductor.kafka.streams.workers.producer.listener.topic", "");
         if (registerWorkersConsumerTopic.isEmpty() && registerWorkersProducerTopic.isEmpty()) {
             logger.error("Topic missing for Kafka Worker listener.");
             throw new IllegalArgumentException("Topic missing for Kafka Worker listener.");
