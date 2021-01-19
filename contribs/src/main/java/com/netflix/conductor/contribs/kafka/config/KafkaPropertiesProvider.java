@@ -2,6 +2,7 @@ package com.netflix.conductor.contribs.kafka.config;
 
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsProductionExceptionHandler;
+import com.netflix.conductor.contribs.kafka.streamsutil.TestExceptionHandler;
 import com.netflix.conductor.core.config.Configuration;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -22,8 +23,10 @@ public class KafkaPropertiesProvider {
     private static final String KAFKA_CONSUMER_PREFIX = "kafka.consumer.";
     private static final String KAFKA_STREAMS_PREFIX = "kafka.streams.";
     private final Map<String, Object> configurationMap;
+    private final Configuration configuration;
 
     public KafkaPropertiesProvider(final Configuration configuration){
+        this.configuration = configuration;
         this.configurationMap = getConfigurationMap(configuration);
     }
 
@@ -106,8 +109,10 @@ public class KafkaPropertiesProvider {
     }
 
     /**
+     * Creates the properties file for the kafka admin of prefix 'kafka.admin.' from the
+     * provided configuration. Fails if any mandatory configs are missing.
      *
-     * @return
+     * @return Properties file for kafka admin configuration
      */
     public Properties getAdminProperties(){
         final Properties adminProperties = new Properties();
@@ -127,7 +132,7 @@ public class KafkaPropertiesProvider {
     }
 
     /**
-     * Create a configuration map of the given config file and make verify that thee config file
+     * Create a configuration map of the given config file and make verify that the config file
      * is not null
      *
      * @param configuration Main configuration file for the Conductor application
@@ -143,6 +148,7 @@ public class KafkaPropertiesProvider {
     }
 
     /**
+     * Checks that the mandatory configurations are available for kafka admin
      *
      * @param properties
      */
@@ -159,7 +165,7 @@ public class KafkaPropertiesProvider {
     /**
      * Checks that the mandatory configurations are available for kafka streams
      *
-     * @param properties Properties object for providing the necessary properties to Kafka Streams
+     * @param properties Properties object for providing the necessary properties to Kafka Admin
      */
     private void checkStreamsProperties(final Properties properties) {
         final List<String> mandatoryKeys = Arrays.asList(StreamsConfig.APPLICATION_ID_CONFIG,
@@ -206,7 +212,7 @@ public class KafkaPropertiesProvider {
      *
      * @param properties Properties object for providing the necessary properties to Kafka Streams
      */
-    private void setKafkaStreamsDeserializationExceptionHandler(final Properties properties){
+    private void setKafkaStreamsDeserializationExceptionHandler(Properties properties){
         properties.put(StreamsConfig.DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG,
                 KafkaStreamsDeserializationExceptionHandler.class);
     }
@@ -216,9 +222,9 @@ public class KafkaPropertiesProvider {
      *
      * @param properties Properties object for providing the necessary properties to Kafka Streams
      */
-    private void setKafkaStreamsProductionExceptionHandler(final Properties properties){
+    private void setKafkaStreamsProductionExceptionHandler(Properties properties){
         properties.put(StreamsConfig.DEFAULT_PRODUCTION_EXCEPTION_HANDLER_CLASS_CONFIG,
-                KafkaStreamsProductionExceptionHandler.class);
+                new KafkaStreamsProductionExceptionHandler(configuration, getProducerProperties()).getProductionExceptionHandler());
     }
 
     /**
