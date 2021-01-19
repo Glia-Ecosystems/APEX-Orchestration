@@ -30,10 +30,11 @@ public class KafkaStreamsProductionExceptionHandler  {
     }
 
     /**
+     *  Using a ThreadPool, spawn a separate thread to reattempt publish of message to respective topic
      *
-     * @param topic
-     * @param recordKey
-     * @param recordMessage
+     * @param topic The kafka topic where the message should be publish
+     * @param recordKey  The key of the message
+     * @param recordMessage The message to be resend
      */
     public static void retry(String topic, String recordKey, String recordMessage){
         threadPool.execute(() -> {
@@ -50,11 +51,12 @@ public class KafkaStreamsProductionExceptionHandler  {
     }
 
     /**
+     * Reattempt publish of message with certain number of reattempts and delays between each attempt
      *
-     * @param topic
-     * @param key
-     * @param message
-     * @throws InterruptedException
+     * @param topic The kafka topic where the message should be publish
+     * @param key The key of the message
+     * @param message The message to be resend
+     * @throws InterruptedException Occurs when a thread is interrupted before or during its respective activity
      */
     private static void reattemptsPublishMessage(String topic, String key, String message) throws InterruptedException {
         Long exponentialDelay = retryDelayMilliSeconds;
@@ -68,12 +70,13 @@ public class KafkaStreamsProductionExceptionHandler  {
     }
 
     /**
+     *  Publish message to topic
      *
-     * @param topic
-     * @param key
-     * @param message
-     * @return
-     * @throws InterruptedException
+     * @param topic The kafka topic where the message should be publish
+     * @param key The key of the message
+     * @param message The message to be resend
+     * @return Indicator if the message was successfully resented
+     * @throws InterruptedException Occurs when a thread is interrupted before or during its respective activity
      */
     private static boolean sendMessageAttempt(final String topic, final String key, final String message) throws InterruptedException {
         try {
@@ -87,54 +90,67 @@ public class KafkaStreamsProductionExceptionHandler  {
     }
 
     /**
+     * Get inner class object
      *
-     * @return
+     * @return Inner (ExceptionHandlerProduction) class object
      */
     public Class<ExceptionHandlerProduction> getProductionExceptionHandler(){
         return ExceptionHandlerProduction.class;
     }
 
     /**
+     * Set retry count variable
      *
-     * @param retryCount
+     * This setter method is used to suppress warning for not assigning static class variable upon instantiation of class
+     *
+     * @param retryCount The number of retries to be attempted in resending the message
      */
     private static void setRetryCount(int retryCount) {
         KafkaStreamsProductionExceptionHandler.retryCount = retryCount;
     }
 
     /**
+     * Set producer variable
      *
-     * @param producer
+     * This setter method is used to suppress warning for not assigning static class variable upon instantiation of class
+     *
+     * @param producer A Kafka Producer object
      */
     private static void setProducer(KafkaProducer<String, String> producer) {
         KafkaStreamsProductionExceptionHandler.producer = producer;
     }
 
     /**
+     * Set thread pool variable
      *
-     * @param threadPool
+     * This setter method is used to suppress warning for not assigning static class variable upon instantiation of class
+     *
+     * @param threadPool A Thread pool for reusing a capped specified number of threads for attempts to resend messages
      */
     private static void setThreadPool(ExecutorService threadPool) {
         KafkaStreamsProductionExceptionHandler.threadPool = threadPool;
     }
 
     /**
+     * Set retry delay milliseconds variable
      *
-     * @param retryDelayMilliSeconds
+     * This setter method is used to suppress warning for not assigning static class variable upon instantiation of class
+     *
+     * @param retryDelayMilliSeconds The time in milliseconds, indicating intervals between reattempts of sending messages
      */
     private static void setRetryDelayMilliSeconds(Long retryDelayMilliSeconds) {
         KafkaStreamsProductionExceptionHandler.retryDelayMilliSeconds = retryDelayMilliSeconds;
     }
 
     /**
-     *
+     * Creates a shutdown hook to close the Kafka producer upon closing of the application
      */
     private void cleanUp(){
         Runtime.getRuntime().addShutdownHook(new Thread(producer::close));
     }
 
     /**
-     *
+     * A Custom Production Exception Handler for Kafka Streams
      */
     public static class ExceptionHandlerProduction implements ProductionExceptionHandler{
 

@@ -61,6 +61,7 @@ public class KafkaStreamsDeserializationExceptionHandler extends LogAndContinueE
     /***
      * Process the unique Kafka Streams topic URI exception into a response container to be return to the client who
      * made the request
+     *
      * @param requestContainer Contains all the needed information for processing the request
      * @return Response of the exception that occurred for client
      */

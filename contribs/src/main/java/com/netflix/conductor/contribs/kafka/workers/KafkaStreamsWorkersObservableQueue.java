@@ -227,7 +227,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     @Override
     public List<String> ack(List<Message> messages) {
         // This function have not been implemented yet
-        logger.error("Called a function not implemented yet.");
+        logger.error("Called the ack function, not implemented yet.");
         // Restores the interrupt by the InterruptedException so that caller can see that
         // interrupt has occurred.
         Thread.currentThread().interrupt();
@@ -242,7 +242,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
     @Override
     public void publish(List<Message> messages) {
         // This function have not been implemented yet
-        logger.error("Called a function not implemented yet.");
+        logger.error("Called the publish function, not implemented yet.");
         // Restores the interrupt by the InterruptedException so that caller can see that
         // interrupt has occurred.
         Thread.currentThread().interrupt();
