@@ -14,10 +14,7 @@ import com.netflix.conductor.contribs.kafka.streamsutil.ResponseContainerSerde;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
-import com.netflix.conductor.core.execution.ApplicationException;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -28,7 +25,6 @@ import org.slf4j.LoggerFactory;
 import rx.Observable;
 
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -132,7 +128,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
         processedError.to(apexResponsesTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedRequest.filter((clientId, response) -> response.isStartedAWorkflow() && response.getResponseEntity() != null)
                  .foreach((client, response) -> threadPool.execute(new WorkflowStatusMonitor(resourceHandler, objectMapper,
-                         this, client, (String) response.getResponseEntity())));
+                         producer, apexResponsesTopic, client, (String) response.getResponseEntity())));
         return builder.build();
     }
 
@@ -199,38 +195,13 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     }
 
     /**
-     * Publish the messages to the given topic.
-     *
-     * @param key Key of the record to be publish
-     * @param value Value of the record to be publish
-     */
-    public void publishMessage(final String key, final String value) {
-        final ProducerRecord<String, String> record = new ProducerRecord<>(apexResponsesTopic, key,
-                value);
-        final RecordMetadata metadata;
-        try {
-            metadata = producer.send(record).get();
-            final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
-                    ", partition " + metadata.partition() + ", offset " + metadata.offset();
-            logger.debug(producerLogging);
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
-        } catch (final ExecutionException e) {
-            logger.error("Publish message to kafka topic {} failed with an error: {}", apexResponsesTopic, e.getMessage(), e);
-            throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
-        }
-        logger.info("Message published to kafka topic {}. key/client {}", apexResponsesTopic, key);
-    }
-
-    /**
      * Provide RX Observable object for consuming messages from Kafka Consumer
      * @return Observable object
      */
     @Override
     public Observable<Message> observe() {
         // This function have not been implemented yet
-        logger.error("Called a function not implemented yet.");
+        logger.error("Called the observe function, not implemented yet.");
         // Restores the interrupt by the InterruptedException so that caller can see that
         // interrupt has occurred.
         Thread.currentThread().interrupt();
@@ -273,7 +244,7 @@ public class KafkaStreamsObservableQueue implements ObservableQueue, Runnable {
     @Override
     public List<String> ack(final List<Message> messages) {
         // This function have not been implemented yet
-        logger.error("Called a function not implemented yet.");
+        logger.error("Called the ack function, not implemented yet.");
         // Restores the interrupt by the InterruptedException so that caller can see that
         // interrupt has occurred.
         Thread.currentThread().interrupt();

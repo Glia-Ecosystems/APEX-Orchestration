@@ -6,7 +6,6 @@ import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.execution.ApplicationException;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
@@ -58,13 +57,9 @@ public class Heartbeat extends TimerTask {
      */
     private void sendHeartbeat(){
         try {
-            final RecordMetadata metadata;
             final ProducerRecord<String, String> record = new ProducerRecord<>(heartbeatTopic, "Orchestrator",
                     createHeartbeat());
-            metadata = producer.send(record).get();
-            final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
-                    ", partition " + metadata.partition() + ", offset " + metadata.offset();
-            logger.debug(producerLogging);
+            producer.send(record).get();
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.error("Publish heartbeat to kafka topic {} failed with an error: {}", heartbeatTopic, e.getMessage(), e);

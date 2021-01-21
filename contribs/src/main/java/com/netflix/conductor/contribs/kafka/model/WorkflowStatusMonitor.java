@@ -3,12 +3,16 @@ package com.netflix.conductor.contribs.kafka.model;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
-import com.netflix.conductor.contribs.kafka.KafkaStreamsObservableQueue;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
+import com.netflix.conductor.core.execution.ApplicationException;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Monitors and updates the client via kafka the status of the workflow until
@@ -21,18 +25,20 @@ public class WorkflowStatusMonitor implements Runnable {
     private final Gson gson;
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
-    private final KafkaStreamsObservableQueue kafka;
+    private final KafkaProducer<String, String> producer;
     private final String clientID;
     private final String workflowID;
+    private final String responsesTopic;
     private Object currentStatus;
 
     public WorkflowStatusMonitor(final ResourceHandler resourceHandler, final ObjectMapper objectMapper,
-                                 final KafkaStreamsObservableQueue kafkaStreams, final String clientID,
-                                 final String workflowID) {
+                                 final KafkaProducer<String, String> producer, final String responsesTopic,
+                                 final String clientID, final String workflowID) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
         this.gson = new Gson();
-        this.kafka = kafkaStreams;
+        this.producer = producer;
+        this.responsesTopic = responsesTopic;
         this.clientID = clientID;
         this.workflowID = workflowID;
         this.currentStatus = "";
@@ -95,7 +101,7 @@ public class WorkflowStatusMonitor implements Runnable {
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      */
     private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
-        kafka.publishMessage(clientID, gson.toJson(responseContainer.getResponseData()));
+        publishMessage(clientID, gson.toJson(responseContainer.getResponseData()));
     }
 
     /**
@@ -106,6 +112,31 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private Map<String, Object> objectToMap(final Object object) {
         return objectMapper.convertValue(object, new TypeReference<Map<String, Object>>() {});
+    }
+
+    /**
+     * Publish the messages to the given topic.
+     *
+     * @param key Key of the record to be publish
+     * @param value Value of the record to be publish
+     */
+    public void publishMessage(final String key, final String value) {
+        final ProducerRecord<String, String> record = new ProducerRecord<>(responsesTopic, key,
+                value);
+        final RecordMetadata metadata;
+        try {
+            metadata = producer.send(record).get();
+            final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
+                    ", partition " + metadata.partition() + ", offset " + metadata.offset();
+            logger.debug(producerLogging);
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Publish message to kafka topic {} failed with an error: {}", responsesTopic, e.getMessage(), e);
+        } catch (final ExecutionException e) {
+            logger.error("Publish message to kafka topic {} failed with an error: {}", responsesTopic, e.getMessage(), e);
+            throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
+        }
+        logger.info("Message published to kafka topic {}. key/client {}", responsesTopic, key);
     }
 
     /**

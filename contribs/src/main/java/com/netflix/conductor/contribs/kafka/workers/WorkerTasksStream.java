@@ -87,22 +87,28 @@ public class WorkerTasksStream implements Runnable {
         KStream<String, RequestContainer> taskStream = builder.stream(updateTopic, Consumed.with(Serdes.String(),
                 requestContainerSerde));
         Predicate<String, RequestContainer> keyError = (workerName, request) -> workerName.isEmpty();
-        Predicate<String, RequestContainer> continueTaskStream = (workerName, request) ->
-                !request.isDeserializationErrorOccurred();
         Predicate<String, RequestContainer> errorOccurred = (workerName, request) ->
                 request.isDeserializationErrorOccurred();
+        Predicate<String, RequestContainer> uniqueURIError = (clientId, request) ->
+                !request.getResourceURI().contains("/tasks");
+        Predicate<String, RequestContainer> continueTaskStream = (workerName, request) ->
+                !request.isDeserializationErrorOccurred();
         // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
         // if predicate is true.
-        KStream<String, RequestContainer>[] executeDept = taskStream.branch(keyError, errorOccurred, continueTaskStream);
+        KStream<String, RequestContainer>[] executeDept = taskStream.branch(keyError, errorOccurred, uniqueURIError,
+                continueTaskStream);
         KStream<String, ResponseContainer> processedKeyError = executeDept[0].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
         KStream<String, ResponseContainer> processedValueError = executeDept[1].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
-        KStream<String, ResponseContainer> processedTask = executeDept[2].
+        KStream<String, ResponseContainer> processedURIError = executeDept[2].
+                    mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
+        KStream<String, ResponseContainer> processedTask = executeDept[3].
                 mapValues(resourceHandler::processRequest);
         processedTask.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedKeyError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedValueError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedURIError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         return builder.build();
     }
 
