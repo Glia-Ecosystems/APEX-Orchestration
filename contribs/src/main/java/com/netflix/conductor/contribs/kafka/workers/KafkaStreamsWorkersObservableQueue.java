@@ -49,7 +49,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
                                               final String registerWorkersProducerTopic) {
         this.resourceHandler = resourceHandler;
         this.startupTreadSleep = configuration.getLongProperty("conductor.kafka.workers.listener.startup.thread.sleep", 45000);
-        this.kafkaTopicsManager = new KafkaTopicsManager(configuration, kafkaPropertiesProvider);
+        this.kafkaTopicsManager = kafkaTopicsManager;
         this.requestContainerSerde = new RequestContainerSerde();
         this.responseContainerSerde = new ResponseContainerSerde();
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
