@@ -1,17 +1,14 @@
 /*
- * Copyright 2016 Netflix, Inc.
+ * Copyright 2020 Netflix, Inc.
  * <p>
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 package com.netflix.conductor.core.execution;
 
@@ -20,6 +17,7 @@ import static com.netflix.conductor.common.metadata.tasks.Task.Status.IN_PROGRES
 import static com.netflix.conductor.common.metadata.tasks.Task.Status.SCHEDULED;
 import static com.netflix.conductor.common.metadata.tasks.Task.Status.SKIPPED;
 import static com.netflix.conductor.common.metadata.tasks.Task.Status.TIMED_OUT;
+import static com.netflix.conductor.common.metadata.workflow.TaskType.SUB_WORKFLOW;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.netflix.conductor.common.metadata.tasks.Task;
@@ -301,7 +299,7 @@ public class DeciderService {
 
         WorkflowDef workflowDef = workflow.getWorkflowDefinition();
         Map<String, Object> output;
-        if (workflowDef.getOutputParameters() != null && !workflowDef.getOutputParameters().isEmpty()) {
+        if (workflowDef.getOutputParameters() != null && !workflowDef.getOutputParameters().isEmpty() && !(TaskType.TERMINATE.name().equals(last.getTaskType()))) {
             Workflow workflowInstance = populateWorkflowAndTaskData(workflow);
             output = parametersUtils.getTaskInput(workflowDef.getOutputParameters(), workflowInstance, null, null);
         } else if (StringUtils.isNotBlank(last.getExternalOutputPayloadStoragePath())) {
@@ -346,7 +344,8 @@ public class DeciderService {
         return allCompletedSuccessfully && noPendingTasks && noPendingSchedule;
     }
 
-    private List<Task> getNextTask(Workflow workflow, Task task) {
+    @VisibleForTesting
+    List<Task> getNextTask(Workflow workflow, Task task) {
         final WorkflowDef workflowDef = workflow.getWorkflowDefinition();
 
         // Get the following task after the last completed task
@@ -360,6 +359,13 @@ public class DeciderService {
         WorkflowTask taskToSchedule = workflowDef.getNextTask(taskReferenceName);
         while (isTaskSkipped(taskToSchedule, workflow)) {
             taskToSchedule = workflowDef.getNextTask(taskToSchedule.getTaskReferenceName());
+        }
+        if (taskToSchedule != null && TaskType.DO_WHILE.name().equals(taskToSchedule.getType())) {
+            // check if already has this DO_WHILE task, ignore it if it already exists
+            String nextTaskReferenceName = taskToSchedule.getTaskReferenceName();
+            if (workflow.getTasks().stream().anyMatch(runningTask -> runningTask.getReferenceTaskName().equals(nextTaskReferenceName))) {
+                return Collections.emptyList();
+            }
         }
         if (taskToSchedule != null) {
             return getTasksToBeScheduled(workflow, taskToSchedule, 0);
@@ -388,11 +394,23 @@ public class DeciderService {
             taskDefinition = metadataDAO.getTaskDef(task.getTaskDefName());
         }
 
-        if (!task.getStatus().isRetriable() || SystemTaskType.isBuiltIn(task.getTaskType()) || taskDefinition == null || taskDefinition.getRetryCount() <= retryCount) {
+        final int expectedRetryCount = taskDefinition == null ? 0 : Optional.ofNullable(workflowTask).map(WorkflowTask::getRetryCount).orElse(taskDefinition.getRetryCount());
+        if (!task.getStatus().isRetriable() || SystemTaskType.isBuiltIn(task.getTaskType()) || expectedRetryCount <= retryCount) {
             if (workflowTask != null && workflowTask.isOptional()) {
                 return Optional.empty();
             }
-            WorkflowStatus status = task.getStatus().equals(TIMED_OUT) ? WorkflowStatus.TIMED_OUT : WorkflowStatus.FAILED;
+            WorkflowStatus status;
+            switch (task.getStatus()) {
+                case CANCELED:
+                    status = WorkflowStatus.TERMINATED;
+                    break;
+                case TIMED_OUT:
+                    status = WorkflowStatus.TIMED_OUT;
+                    break;
+                default:
+                    status = WorkflowStatus.FAILED;
+                    break;
+            }
             updateWorkflowOutput(workflow, task);
             throw new TerminateWorkflowException(task.getReasonForIncompletion(), status, task);
         }
@@ -502,19 +520,21 @@ public class DeciderService {
 
         long timeout = 1000L * workflowDef.getTimeoutSeconds();
         long now = System.currentTimeMillis();
-        long elapsedTime = now - workflow.getStartTime();
+        long elapsedTime = workflow.getLastRetriedTime() > 0 ? now - workflow.getLastRetriedTime() :
+            now - workflow.getStartTime();
 
         if (elapsedTime < timeout) {
             return;
         }
 
-        String reason = String.format("Workflow timed out after %d seconds. Timeout configured as %d. " +
-                "Timeout policy configured to %s",elapsedTime/1000L, timeout, workflowDef.getTimeoutPolicy().name());
-        Monitors.recordWorkflowTermination(workflow.getWorkflowName(), WorkflowStatus.TIMED_OUT, workflow.getOwnerApp());
+        String reason = String.format("Workflow '%s' timed out after %d seconds. Timeout configured as %d. " +
+                "Timeout policy configured to %s", workflow.getWorkflowId(), elapsedTime / 1000L, timeout,
+            workflowDef.getTimeoutPolicy().name());
 
         switch (workflowDef.getTimeoutPolicy()) {
             case ALERT_ONLY:
                 LOGGER.info(reason);
+                Monitors.recordWorkflowTermination(workflow.getWorkflowName(), WorkflowStatus.TIMED_OUT, workflow.getOwnerApp());
                 return;
             case TIME_OUT_WF:
                 throw new TerminateWorkflowException(reason, WorkflowStatus.TIMED_OUT);
@@ -594,7 +614,7 @@ public class DeciderService {
             LOGGER.warn("missing task type : {}, workflowId= {}", task.getTaskDefName(), task.getWorkflowInstanceId());
             return false;
         }
-        if (task.getStatus().isTerminal()) {
+        if (task.getStatus().isTerminal() || task.getTaskType().equals(SUB_WORKFLOW.name())) {
             return false;
         }
 

@@ -135,7 +135,17 @@ public interface ExecutionDAO {
 	 * @return true if the deletion is successful, false otherwise
 	 */
 	boolean removeWorkflow(String workflowId);
-	
+
+
+	/**
+	 * Removes the workflow with ttl seconds
+	 *
+	 * @param workflowId workflowId workflow instance id
+	 * @param ttlSeconds time to live in seconds.
+	 * @return
+	 */
+	boolean removeWorkflowWithExpiry(String workflowId, int ttlSeconds);
+
 	/**
 	 * 
 	 * @param workflowType Workflow Type
@@ -199,12 +209,13 @@ public interface ExecutionDAO {
 
 	/**
 	 * 
+	 * @param workflowName workflow name
 	 * @param correlationId Correlation Id
 	 * @param includeTasks Option to includeTasks in results
 	 * @return List of workflows by correlation id
 	 *  
 	 */
-	List<Workflow> getWorkflowsByCorrelationId(String correlationId, boolean includeTasks);
+	List<Workflow> getWorkflowsByCorrelationId(String workflowName, String correlationId, boolean includeTasks);
 
 	/**
 	 *
@@ -218,7 +229,7 @@ public interface ExecutionDAO {
 	/**
 	 * 
 	 * @param ee Event Execution to be stored
-	 * @return true if the event was added.  false otherwise when the event by id is already already stored.
+	 * @return true if the event was added.  false otherwise when the event by id is already stored.
 	 */
 	boolean addEventExecution(EventExecution ee);
 

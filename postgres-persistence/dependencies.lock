@@ -1391,7 +1391,8 @@
         "aopalliance:aopalliance": {
             "locked": "1.0",
             "transitive": [
-                "com.google.inject:guice"
+                "com.google.inject:guice",
+                "org.springframework:spring-aop"
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
@@ -1466,6 +1467,12 @@
             "locked": "2.0.2",
             "transitive": [
                 "com.github.rholder:guava-retrying"
+            ]
+        },
+        "com.google.collections:google-collections": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
             ]
         },
         "com.google.guava:guava": {
@@ -1547,7 +1554,8 @@
             "locked": "1.2",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
-                "org.apache.httpcomponents:httpclient"
+                "org.apache.httpcomponents:httpclient",
+                "org.springframework:spring-core"
             ]
         },
         "io.reactivex:rxjava": {
@@ -1563,11 +1571,18 @@
                 "com.netflix.conductor:conductor-common"
             ]
         },
+        "javax.persistence:persistence-api": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
         "javax.validation:validation-api": {
             "locked": "2.0.1.Final",
             "transitive": [
                 "com.netflix.conductor:conductor-common",
-                "com.netflix.conductor:conductor-core"
+                "com.netflix.conductor:conductor-core",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "joda-time:joda-time": {
@@ -1650,7 +1665,22 @@
         "org.hamcrest:hamcrest-core": {
             "locked": "1.3",
             "transitive": [
-                "junit:junit"
+                "junit:junit",
+                "org.hamcrest:hamcrest-library",
+                "org.testinfected.hamcrest-matchers:core-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
+            ]
+        },
+        "org.hamcrest:hamcrest-library": {
+            "locked": "1.3",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "org.mockito:mockito-core": {
@@ -1687,6 +1717,90 @@
         "org.slf4j:slf4j-log4j12": {
             "locked": "1.8.0-alpha1",
             "requested": "1.8.0-alpha1"
+        },
+        "org.springframework:spring-aop": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-asm": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context",
+                "org.springframework:spring-core"
+            ]
+        },
+        "org.springframework:spring-beans": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-context": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:spring-matchers"
+            ]
+        },
+        "org.springframework:spring-core": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-beans",
+                "org.springframework:spring-context",
+                "org.springframework:spring-expression"
+            ]
+        },
+        "org.springframework:spring-expression": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:all-matchers": {
+            "locked": "1.8",
+            "requested": "1.8"
+        },
+        "org.testinfected.hamcrest-matchers:core-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:dom-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:jpa-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:spring-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:validation-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "se.fishtank:css-selectors": {
+            "locked": "1.0.5",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers"
+            ]
         },
         "software.amazon.ion:ion-java": {
             "locked": "1.0.1",
@@ -1699,7 +1813,8 @@
         "aopalliance:aopalliance": {
             "locked": "1.0",
             "transitive": [
-                "com.google.inject:guice"
+                "com.google.inject:guice",
+                "org.springframework:spring-aop"
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
@@ -1774,6 +1889,12 @@
             "locked": "2.0.2",
             "transitive": [
                 "com.github.rholder:guava-retrying"
+            ]
+        },
+        "com.google.collections:google-collections": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
             ]
         },
         "com.google.guava:guava": {
@@ -1855,7 +1976,8 @@
             "locked": "1.2",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
-                "org.apache.httpcomponents:httpclient"
+                "org.apache.httpcomponents:httpclient",
+                "org.springframework:spring-core"
             ]
         },
         "io.reactivex:rxjava": {
@@ -1871,11 +1993,18 @@
                 "com.netflix.conductor:conductor-common"
             ]
         },
+        "javax.persistence:persistence-api": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
         "javax.validation:validation-api": {
             "locked": "2.0.1.Final",
             "transitive": [
                 "com.netflix.conductor:conductor-common",
-                "com.netflix.conductor:conductor-core"
+                "com.netflix.conductor:conductor-core",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "joda-time:joda-time": {
@@ -1958,7 +2087,22 @@
         "org.hamcrest:hamcrest-core": {
             "locked": "1.3",
             "transitive": [
-                "junit:junit"
+                "junit:junit",
+                "org.hamcrest:hamcrest-library",
+                "org.testinfected.hamcrest-matchers:core-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
+            ]
+        },
+        "org.hamcrest:hamcrest-library": {
+            "locked": "1.3",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "org.mockito:mockito-core": {
@@ -1995,6 +2139,90 @@
         "org.slf4j:slf4j-log4j12": {
             "locked": "1.8.0-alpha1",
             "requested": "1.8.0-alpha1"
+        },
+        "org.springframework:spring-aop": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-asm": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context",
+                "org.springframework:spring-core"
+            ]
+        },
+        "org.springframework:spring-beans": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-context": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:spring-matchers"
+            ]
+        },
+        "org.springframework:spring-core": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-beans",
+                "org.springframework:spring-context",
+                "org.springframework:spring-expression"
+            ]
+        },
+        "org.springframework:spring-expression": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:all-matchers": {
+            "locked": "1.8",
+            "requested": "1.8"
+        },
+        "org.testinfected.hamcrest-matchers:core-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:dom-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:jpa-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:spring-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:validation-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "se.fishtank:css-selectors": {
+            "locked": "1.0.5",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers"
+            ]
         },
         "software.amazon.ion:ion-java": {
             "locked": "1.0.1",
@@ -2007,7 +2235,8 @@
         "aopalliance:aopalliance": {
             "locked": "1.0",
             "transitive": [
-                "com.google.inject:guice"
+                "com.google.inject:guice",
+                "org.springframework:spring-aop"
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
@@ -2082,6 +2311,12 @@
             "locked": "2.0.2",
             "transitive": [
                 "com.github.rholder:guava-retrying"
+            ]
+        },
+        "com.google.collections:google-collections": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
             ]
         },
         "com.google.guava:guava": {
@@ -2163,7 +2398,8 @@
             "locked": "1.2",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
-                "org.apache.httpcomponents:httpclient"
+                "org.apache.httpcomponents:httpclient",
+                "org.springframework:spring-core"
             ]
         },
         "io.reactivex:rxjava": {
@@ -2179,11 +2415,18 @@
                 "com.netflix.conductor:conductor-common"
             ]
         },
+        "javax.persistence:persistence-api": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
         "javax.validation:validation-api": {
             "locked": "2.0.1.Final",
             "transitive": [
                 "com.netflix.conductor:conductor-common",
-                "com.netflix.conductor:conductor-core"
+                "com.netflix.conductor:conductor-core",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "joda-time:joda-time": {
@@ -2266,7 +2509,22 @@
         "org.hamcrest:hamcrest-core": {
             "locked": "1.3",
             "transitive": [
-                "junit:junit"
+                "junit:junit",
+                "org.hamcrest:hamcrest-library",
+                "org.testinfected.hamcrest-matchers:core-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
+            ]
+        },
+        "org.hamcrest:hamcrest-library": {
+            "locked": "1.3",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "org.mockito:mockito-core": {
@@ -2303,6 +2561,90 @@
         "org.slf4j:slf4j-log4j12": {
             "locked": "1.8.0-alpha1",
             "requested": "1.8.0-alpha1"
+        },
+        "org.springframework:spring-aop": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-asm": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context",
+                "org.springframework:spring-core"
+            ]
+        },
+        "org.springframework:spring-beans": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-context": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:spring-matchers"
+            ]
+        },
+        "org.springframework:spring-core": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-beans",
+                "org.springframework:spring-context",
+                "org.springframework:spring-expression"
+            ]
+        },
+        "org.springframework:spring-expression": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:all-matchers": {
+            "locked": "1.8",
+            "requested": "1.8"
+        },
+        "org.testinfected.hamcrest-matchers:core-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:dom-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:jpa-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:spring-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:validation-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "se.fishtank:css-selectors": {
+            "locked": "1.0.5",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers"
+            ]
         },
         "software.amazon.ion:ion-java": {
             "locked": "1.0.1",
@@ -2315,7 +2657,8 @@
         "aopalliance:aopalliance": {
             "locked": "1.0",
             "transitive": [
-                "com.google.inject:guice"
+                "com.google.inject:guice",
+                "org.springframework:spring-aop"
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
@@ -2390,6 +2733,12 @@
             "locked": "2.0.2",
             "transitive": [
                 "com.github.rholder:guava-retrying"
+            ]
+        },
+        "com.google.collections:google-collections": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
             ]
         },
         "com.google.guava:guava": {
@@ -2471,7 +2820,8 @@
             "locked": "1.2",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
-                "org.apache.httpcomponents:httpclient"
+                "org.apache.httpcomponents:httpclient",
+                "org.springframework:spring-core"
             ]
         },
         "io.reactivex:rxjava": {
@@ -2487,11 +2837,18 @@
                 "com.netflix.conductor:conductor-common"
             ]
         },
+        "javax.persistence:persistence-api": {
+            "locked": "1.0",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
         "javax.validation:validation-api": {
             "locked": "2.0.1.Final",
             "transitive": [
                 "com.netflix.conductor:conductor-common",
-                "com.netflix.conductor:conductor-core"
+                "com.netflix.conductor:conductor-core",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "joda-time:joda-time": {
@@ -2574,7 +2931,22 @@
         "org.hamcrest:hamcrest-core": {
             "locked": "1.3",
             "transitive": [
-                "junit:junit"
+                "junit:junit",
+                "org.hamcrest:hamcrest-library",
+                "org.testinfected.hamcrest-matchers:core-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
+            ]
+        },
+        "org.hamcrest:hamcrest-library": {
+            "locked": "1.3",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers",
+                "org.testinfected.hamcrest-matchers:spring-matchers",
+                "org.testinfected.hamcrest-matchers:validation-matchers"
             ]
         },
         "org.mockito:mockito-core": {
@@ -2611,6 +2983,90 @@
         "org.slf4j:slf4j-log4j12": {
             "locked": "1.8.0-alpha1",
             "requested": "1.8.0-alpha1"
+        },
+        "org.springframework:spring-aop": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-asm": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context",
+                "org.springframework:spring-core"
+            ]
+        },
+        "org.springframework:spring-beans": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.springframework:spring-context": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:spring-matchers"
+            ]
+        },
+        "org.springframework:spring-core": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-aop",
+                "org.springframework:spring-beans",
+                "org.springframework:spring-context",
+                "org.springframework:spring-expression"
+            ]
+        },
+        "org.springframework:spring-expression": {
+            "locked": "3.0.2.RELEASE",
+            "transitive": [
+                "org.springframework:spring-context"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:all-matchers": {
+            "locked": "1.8",
+            "requested": "1.8"
+        },
+        "org.testinfected.hamcrest-matchers:core-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers",
+                "org.testinfected.hamcrest-matchers:dom-matchers",
+                "org.testinfected.hamcrest-matchers:jpa-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:dom-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:jpa-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:spring-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "org.testinfected.hamcrest-matchers:validation-matchers": {
+            "locked": "1.8",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:all-matchers"
+            ]
+        },
+        "se.fishtank:css-selectors": {
+            "locked": "1.0.5",
+            "transitive": [
+                "org.testinfected.hamcrest-matchers:dom-matchers"
+            ]
         },
         "software.amazon.ion:ion-java": {
             "locked": "1.0.1",

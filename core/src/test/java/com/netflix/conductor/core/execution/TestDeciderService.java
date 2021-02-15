@@ -40,18 +40,7 @@ import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.common.utils.TaskUtils;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.execution.DeciderService.DeciderOutcome;
-import com.netflix.conductor.core.execution.mapper.DecisionTaskMapper;
-import com.netflix.conductor.core.execution.mapper.DynamicTaskMapper;
-import com.netflix.conductor.core.execution.mapper.EventTaskMapper;
-import com.netflix.conductor.core.execution.mapper.ForkJoinDynamicTaskMapper;
-import com.netflix.conductor.core.execution.mapper.ForkJoinTaskMapper;
-import com.netflix.conductor.core.execution.mapper.HTTPTaskMapper;
-import com.netflix.conductor.core.execution.mapper.JoinTaskMapper;
-import com.netflix.conductor.core.execution.mapper.SimpleTaskMapper;
-import com.netflix.conductor.core.execution.mapper.SubWorkflowTaskMapper;
-import com.netflix.conductor.core.execution.mapper.TaskMapper;
-import com.netflix.conductor.core.execution.mapper.UserDefinedTaskMapper;
-import com.netflix.conductor.core.execution.mapper.WaitTaskMapper;
+import com.netflix.conductor.core.execution.mapper.*;
 import com.netflix.conductor.core.utils.ExternalPayloadStorageUtils;
 import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.spectator.api.Counter;
@@ -132,6 +121,7 @@ public class TestDeciderService {
         taskMappers.put("EVENT", new EventTaskMapper(parametersUtils));
         taskMappers.put("WAIT", new WaitTaskMapper(parametersUtils));
         taskMappers.put("HTTP", new HTTPTaskMapper(parametersUtils, metadataDAO));
+        taskMappers.put("LAMBDA", new LambdaTaskMapper(parametersUtils, metadataDAO));
 
         deciderService = new DeciderService(parametersUtils, metadataDAO, externalPayloadStorageUtils, taskMappers, config);
     }
@@ -676,6 +666,59 @@ public class TestDeciderService {
     }
 
     @Test
+    public void testWorkflowTaskRetry() {
+        Workflow workflow = createDefaultWorkflow();
+
+        workflow.getWorkflowDefinition().setSchemaVersion(2);
+
+        Map<String, Object> inputParams = new HashMap<>();
+        inputParams.put("workflowInputParam", "${workflow.input.requestId}");
+        inputParams.put("taskOutputParam", "${task2.output.location}");
+        inputParams.put("constParam", "Some String value");
+        inputParams.put("nullValue", null);
+        inputParams.put("task2Status", "${task2.status}");
+        inputParams.put("null", null);
+        inputParams.put("task_id", "${CPEWF_TASK_ID}");
+
+        Map<String, Object> env = new HashMap<>();
+        env.put("env_task_id", "${CPEWF_TASK_ID}");
+        inputParams.put("env", env);
+
+        Map<String, Object> taskInput = parametersUtils.getTaskInput(inputParams, workflow, null, "t1");
+
+        // Create a first failed task
+        Task task = new Task();
+        task.getInputData().putAll(taskInput);
+        task.setStatus(Status.FAILED);
+        task.setTaskId("t1");
+
+        TaskDef taskDef = new TaskDef();
+        assertEquals(3, taskDef.getRetryCount());
+
+        WorkflowTask workflowTask = new WorkflowTask();
+        workflowTask.getInputParameters().put("task_id", "${CPEWF_TASK_ID}");
+        workflowTask.getInputParameters().put("env", env);
+        workflowTask.setRetryCount(1);
+
+        // Retry the failed task and assert that a new one has been created
+        Optional<Task> task2 = deciderService.retry(taskDef, workflowTask, task, workflow);
+        assertEquals("t1", task.getInputData().get("task_id"));
+        assertEquals("t1", ((Map<String, Object>) task.getInputData().get("env")).get("env_task_id"));
+
+        assertNotSame(task.getTaskId(), task2.get().getTaskId());
+        assertEquals(task2.get().getTaskId(), task2.get().getInputData().get("task_id"));
+        assertEquals(task2.get().getTaskId(), ((Map<String, Object>) task2.get().getInputData().get("env")).get("env_task_id"));
+
+        // Set the retried task to FAILED, retry it again and assert that the workflow failed
+        task2.get().setStatus(Status.FAILED);
+        exception.expect(TerminateWorkflowException.class);
+        final Optional<Task> task3 = deciderService.retry(taskDef, workflowTask, task2.get(), workflow);
+
+        assertFalse(task3.isPresent());
+        assertEquals(WorkflowStatus.FAILED, workflow.getStatus());
+    }
+
+    @Test
     public void testExponentialBackoff() {
         Workflow workflow = createDefaultWorkflow();
 
@@ -866,9 +909,14 @@ public class TestDeciderService {
         task.setTaskDefName("test_rt");
         task.setStatus(Status.IN_PROGRESS);
         task.setTaskId("aa");
+        task.setTaskType(TaskType.TASK_TYPE_SIMPLE);
         task.setUpdateTime(System.currentTimeMillis() - TimeUnit.SECONDS.toMillis(11));
 
         assertTrue(deciderService.isResponseTimedOut(taskDef, task));
+
+        // verify that sub workflow tasks are not response timed out
+        task.setTaskType(TaskType.TASK_TYPE_SUB_WORKFLOW);
+        assertFalse(deciderService.isResponseTimedOut(taskDef, task));
     }
 
     @Test
@@ -967,6 +1015,22 @@ public class TestDeciderService {
         assertNotNull(workflow.getOutput());
         assertEquals("taskValue", workflow.getOutput().get("taskKey"));
     }
+    
+    // when workflow definition has outputParameters defined
+    @Test
+    public void testUpdateWorkflowOutput_WhenDefinitionHasOutputParameters() {
+    	Workflow workflow = new Workflow();
+    	WorkflowDef workflowDef = new WorkflowDef();
+    	workflowDef.setOutputParameters(new HashMap() {{ put("workflowKey", "workflowValue"); }});
+    	workflow.setWorkflowDefinition(workflowDef);
+    	Task task = new Task();
+    	task.setReferenceTaskName("test_task");
+    	task.setOutputData(new HashMap() {{ put("taskKey", "taskValue"); }});
+    	workflow.getTasks().add(task);
+    	deciderService.updateWorkflowOutput(workflow, null);
+    	assertNotNull(workflow.getOutput());
+    	assertEquals("workflowValue", workflow.getOutput().get("workflowKey"));
+    }
 
     @Test
     public void testCheckWorkflowTimeout() {
@@ -978,7 +1042,8 @@ public class TestDeciderService {
         workflowDef.setName("test");
         Workflow workflow = new Workflow();
         workflow.setOwnerApp("junit");
-        workflow.setStartTime(System.currentTimeMillis() - 5_000);
+        workflow.setStartTime(System.currentTimeMillis() - 10_000);
+        workflow.setWorkflowId("workflow_id");
 
         // no-op
         workflow.setWorkflowDefinition(null);
@@ -998,10 +1063,80 @@ public class TestDeciderService {
         // time out
         workflowDef.setTimeoutPolicy(WorkflowDef.TimeoutPolicy.TIME_OUT_WF);
         workflow.setWorkflowDefinition(workflowDef);
-        exception.expect(TerminateWorkflowException.class);
-        exception.expectMessage("Workflow timed out");
-        deciderService.checkWorkflowTimeout(workflow);
-        assertEquals(1, counter.count());
+        try {
+            deciderService.checkWorkflowTimeout(workflow);
+        } catch (TerminateWorkflowException twe) {
+            assertTrue(twe.getMessage().contains("Workflow 'workflow_id' timed out"));
+        }
+
+        // for a retried workflow
+        workflow.setLastRetriedTime(System.currentTimeMillis() - 5_000);
+        try {
+            deciderService.checkWorkflowTimeout(workflow);
+        } catch (TerminateWorkflowException twe) {
+            assertTrue(twe.getMessage().contains("Workflow 'workflow_id' timed out"));
+        }
+    }
+
+    @Test
+    public void testDeciderGetNextTask() {
+        WorkflowDef workflowDef = createDoWhileInForkWorkflow();
+        Workflow workflow = new Workflow();
+        workflow.setWorkflowDefinition(workflowDef);
+
+        Task task1 = new Task();
+        task1.setReferenceTaskName("fork");
+        task1.setStatus(Status.COMPLETED);
+        task1.setTaskId("task1");
+
+        Task task2 = new Task();
+        task2.setReferenceTaskName("loopTask");
+        task2.setStatus(Status.SCHEDULED);
+        task2.setTaskId("task2");
+        task2.setIteration(1);
+
+        Task task3 = new Task();
+        task3.setReferenceTaskName("junit_task_0__1");
+        task3.setStatus(Status.COMPLETED);
+        task3.setTaskId("task3");
+        task3.setIteration(1);
+
+        Task task4 = new Task();
+        task4.setReferenceTaskName("junit_task_3");
+        task4.setStatus(Status.COMPLETED);
+        task4.setTaskId("task4");
+
+        Task task5 = new Task();
+        task5.setReferenceTaskName("join");
+        task5.setStatus(Status.IN_PROGRESS);
+        task5.setTaskId("task5");
+
+        workflow.setTasks(Arrays.asList(task1, task2, task3, task4, task5));
+
+        // verify the next task of first task in DoWhile
+        List<Task> nextTask1 = deciderService.getNextTask(workflow, task3);
+        assertEquals(1, nextTask1.size());
+        assertEquals("junit_task_1", nextTask1.get(0).getReferenceTaskName());
+
+        Task task6 = new Task();
+        task6.setReferenceTaskName("junit_task_1__1");
+        task6.setStatus(Status.COMPLETED);
+        task6.setTaskId("task6");
+        task6.setIteration(1);
+
+        workflow.setTasks(Arrays.asList(task1, task2, task3, task4, task5, task6));
+
+        // verify the next task of last task in DoWhile
+        List<Task> nextTask2 = deciderService.getNextTask(workflow, task6);
+        assertEquals(0, nextTask2.size());
+
+        task2.setStatus(Status.COMPLETED);
+        task2.setIteration(10);
+
+        // verify the next task of DoWhile
+        List<Task> nextTask3 = deciderService.getNextTask(workflow, task2);
+        assertEquals(1, nextTask3.size());
+        assertEquals("junit_task_2", nextTask3.get(0).getReferenceTaskName());
     }
 
     private WorkflowDef createConditionalWF() {
@@ -1228,4 +1363,46 @@ public class TestDeciderService {
         return workflowDef;
     }
 
+    private WorkflowDef createDoWhileInForkWorkflow() {
+        String FORK_DOWHILE_TASK_WF = "FORK_DOWHILE_TASK_WF";
+        List<WorkflowTask> workflowTasks = new ArrayList<>(10);
+        for(int i = 0; i < 10; i++){
+            WorkflowTask workflowTask = new WorkflowTask();
+            workflowTask.setTaskReferenceName("junit_task_" + i);
+            workflowTask.setName("junit_task_" + i);
+            workflowTask.setType(TaskType.LAMBDA.name());
+            workflowTasks.add(workflowTask);
+        }
+
+        WorkflowDef workflowDef = new WorkflowDef();
+        workflowDef.setName(FORK_DOWHILE_TASK_WF);
+        workflowDef.setDescription(FORK_DOWHILE_TASK_WF);
+
+        WorkflowTask doWhileTask = new WorkflowTask();
+        doWhileTask.setType(TaskType.DO_WHILE.name());
+        doWhileTask.setName("loopTask");
+        doWhileTask.setTaskReferenceName("loopTask");
+        doWhileTask.setLoopCondition("$.loopTask.iteration < 10");
+        doWhileTask.setLoopOver(workflowTasks.subList(0, 2));
+
+        WorkflowTask forkTask = new WorkflowTask();
+        forkTask.setType(TaskType.FORK_JOIN.name());
+        forkTask.setName("fork");
+        forkTask.setTaskReferenceName("fork");
+        List<List<WorkflowTask>> wtList = new ArrayList<>();
+        wtList.add(Arrays.asList(doWhileTask, workflowTasks.get(2)));
+        wtList.add(Collections.singletonList(workflowTasks.get(3)));
+        forkTask.setForkTasks(wtList);
+
+        WorkflowTask joinTask = new WorkflowTask();
+        joinTask.setType(TaskType.JOIN.name());
+        joinTask.setName("join");
+        joinTask.setTaskReferenceName("join");
+        joinTask.setJoinOn(Arrays.asList(workflowTasks.get(2).getTaskReferenceName(), workflowTasks.get(3).getTaskReferenceName()));
+
+        workflowDef.getTasks().add(forkTask);
+        workflowDef.getTasks().add(joinTask);
+
+        return workflowDef;
+    }
 }

@@ -83,7 +83,7 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -104,13 +104,13 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-sqs": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
         },
         "com.amazonaws:jmespath-java": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -145,6 +145,7 @@
             "locked": "2.10.0",
             "transitive": [
                 "com.fasterxml.jackson.core:jackson-databind",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
                 "com.netflix.eureka:eureka-client",
@@ -160,6 +161,7 @@
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml",
                 "com.fasterxml.jackson.datatype:jackson-datatype-joda",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -177,6 +179,7 @@
                 "com.amazonaws:aws-java-sdk-core",
                 "com.amazonaws:jmespath-java",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -222,6 +225,12 @@
             "locked": "2.4.5",
             "transitive": [
                 "io.swagger:swagger-core"
+            ]
+        },
+        "com.fasterxml.jackson.datatype:jackson-datatype-jsr310": {
+            "locked": "2.10.0",
+            "transitive": [
+                "com.netflix.conductor:conductor-client"
             ]
         },
         "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base": {
@@ -676,13 +685,13 @@
             ]
         },
         "com.netflix.governator:governator": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test"
             ]
         },
         "com.netflix.governator:governator-api": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-core",
@@ -691,7 +700,7 @@
             ]
         },
         "com.netflix.governator:governator-core": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-test",
@@ -699,13 +708,13 @@
             ]
         },
         "com.netflix.governator:governator-test": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test-spock"
             ]
         },
         "com.netflix.governator:governator-test-spock": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "requested": "latest.release"
         },
         "com.netflix.netflix-commons:netflix-eventbus": {
@@ -1336,7 +1345,7 @@
             ]
         },
         "net.thisptr:jackson-jq": {
-            "locked": "0.0.11",
+            "locked": "0.0.12",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -1411,7 +1420,7 @@
             ]
         },
         "org.apache.httpcomponents:httpclient": {
-            "locked": "4.5.9",
+            "locked": "4.5.13",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
                 "com.netflix.dyno:dyno-contrib",
@@ -1426,7 +1435,7 @@
             ]
         },
         "org.apache.httpcomponents:httpcore": {
-            "locked": "4.4.11",
+            "locked": "4.4.13",
             "transitive": [
                 "org.apache.httpcomponents:httpclient",
                 "org.elasticsearch.client:elasticsearch-rest-client"
@@ -1581,7 +1590,8 @@
             "requested": "2.4.15",
             "transitive": [
                 "com.cyrusinnovation:mockito-groovy-support",
-                "org.spockframework:spock-core"
+                "org.spockframework:spock-core",
+                "org.spockframework:spock-guice"
             ]
         },
         "org.codehaus.jettison:jettison": {
@@ -1989,8 +1999,13 @@
             "locked": "1.3-groovy-2.4",
             "requested": "1.3-groovy-2.4",
             "transitive": [
-                "com.netflix.governator:governator-test-spock"
+                "com.netflix.governator:governator-test-spock",
+                "org.spockframework:spock-guice"
             ]
+        },
+        "org.spockframework:spock-guice": {
+            "locked": "1.3-groovy-2.4",
+            "requested": "1.3-groovy-2.4"
         },
         "org.xerial.snappy:snappy-java": {
             "locked": "1.1.7.2",
@@ -2059,7 +2074,7 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -2080,13 +2095,13 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-sqs": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
         },
         "com.amazonaws:jmespath-java": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -2121,6 +2136,7 @@
             "locked": "2.10.0",
             "transitive": [
                 "com.fasterxml.jackson.core:jackson-databind",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
                 "com.netflix.eureka:eureka-client",
@@ -2136,6 +2152,7 @@
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml",
                 "com.fasterxml.jackson.datatype:jackson-datatype-joda",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -2153,6 +2170,7 @@
                 "com.amazonaws:aws-java-sdk-core",
                 "com.amazonaws:jmespath-java",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -2198,6 +2216,12 @@
             "locked": "2.4.5",
             "transitive": [
                 "io.swagger:swagger-core"
+            ]
+        },
+        "com.fasterxml.jackson.datatype:jackson-datatype-jsr310": {
+            "locked": "2.10.0",
+            "transitive": [
+                "com.netflix.conductor:conductor-client"
             ]
         },
         "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base": {
@@ -2652,13 +2676,13 @@
             ]
         },
         "com.netflix.governator:governator": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test"
             ]
         },
         "com.netflix.governator:governator-api": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-core",
@@ -2667,7 +2691,7 @@
             ]
         },
         "com.netflix.governator:governator-core": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-test",
@@ -2675,13 +2699,13 @@
             ]
         },
         "com.netflix.governator:governator-test": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test-spock"
             ]
         },
         "com.netflix.governator:governator-test-spock": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "requested": "latest.release"
         },
         "com.netflix.netflix-commons:netflix-eventbus": {
@@ -3312,7 +3336,7 @@
             ]
         },
         "net.thisptr:jackson-jq": {
-            "locked": "0.0.11",
+            "locked": "0.0.12",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -3387,7 +3411,7 @@
             ]
         },
         "org.apache.httpcomponents:httpclient": {
-            "locked": "4.5.9",
+            "locked": "4.5.13",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
                 "com.netflix.dyno:dyno-contrib",
@@ -3402,7 +3426,7 @@
             ]
         },
         "org.apache.httpcomponents:httpcore": {
-            "locked": "4.4.11",
+            "locked": "4.4.13",
             "transitive": [
                 "org.apache.httpcomponents:httpclient",
                 "org.elasticsearch.client:elasticsearch-rest-client"
@@ -3557,7 +3581,8 @@
             "requested": "2.4.15",
             "transitive": [
                 "com.cyrusinnovation:mockito-groovy-support",
-                "org.spockframework:spock-core"
+                "org.spockframework:spock-core",
+                "org.spockframework:spock-guice"
             ]
         },
         "org.codehaus.jettison:jettison": {
@@ -3965,8 +3990,13 @@
             "locked": "1.3-groovy-2.4",
             "requested": "1.3-groovy-2.4",
             "transitive": [
-                "com.netflix.governator:governator-test-spock"
+                "com.netflix.governator:governator-test-spock",
+                "org.spockframework:spock-guice"
             ]
+        },
+        "org.spockframework:spock-guice": {
+            "locked": "1.3-groovy-2.4",
+            "requested": "1.3-groovy-2.4"
         },
         "org.xerial.snappy:snappy-java": {
             "locked": "1.1.7.2",
@@ -4035,7 +4065,7 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -4056,13 +4086,13 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-sqs": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
         },
         "com.amazonaws:jmespath-java": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -4097,6 +4127,7 @@
             "locked": "2.10.0",
             "transitive": [
                 "com.fasterxml.jackson.core:jackson-databind",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
                 "com.netflix.eureka:eureka-client",
@@ -4112,6 +4143,7 @@
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml",
                 "com.fasterxml.jackson.datatype:jackson-datatype-joda",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -4129,6 +4161,7 @@
                 "com.amazonaws:aws-java-sdk-core",
                 "com.amazonaws:jmespath-java",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -4174,6 +4207,12 @@
             "locked": "2.4.5",
             "transitive": [
                 "io.swagger:swagger-core"
+            ]
+        },
+        "com.fasterxml.jackson.datatype:jackson-datatype-jsr310": {
+            "locked": "2.10.0",
+            "transitive": [
+                "com.netflix.conductor:conductor-client"
             ]
         },
         "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base": {
@@ -4628,13 +4667,13 @@
             ]
         },
         "com.netflix.governator:governator": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test"
             ]
         },
         "com.netflix.governator:governator-api": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-core",
@@ -4643,7 +4682,7 @@
             ]
         },
         "com.netflix.governator:governator-core": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-test",
@@ -4651,13 +4690,13 @@
             ]
         },
         "com.netflix.governator:governator-test": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test-spock"
             ]
         },
         "com.netflix.governator:governator-test-spock": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "requested": "latest.release"
         },
         "com.netflix.netflix-commons:netflix-eventbus": {
@@ -5288,7 +5327,7 @@
             ]
         },
         "net.thisptr:jackson-jq": {
-            "locked": "0.0.11",
+            "locked": "0.0.12",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -5363,7 +5402,7 @@
             ]
         },
         "org.apache.httpcomponents:httpclient": {
-            "locked": "4.5.9",
+            "locked": "4.5.13",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
                 "com.netflix.dyno:dyno-contrib",
@@ -5378,7 +5417,7 @@
             ]
         },
         "org.apache.httpcomponents:httpcore": {
-            "locked": "4.4.11",
+            "locked": "4.4.13",
             "transitive": [
                 "org.apache.httpcomponents:httpclient",
                 "org.elasticsearch.client:elasticsearch-rest-client"
@@ -5533,7 +5572,8 @@
             "requested": "2.4.15",
             "transitive": [
                 "com.cyrusinnovation:mockito-groovy-support",
-                "org.spockframework:spock-core"
+                "org.spockframework:spock-core",
+                "org.spockframework:spock-guice"
             ]
         },
         "org.codehaus.jettison:jettison": {
@@ -5941,8 +5981,13 @@
             "locked": "1.3-groovy-2.4",
             "requested": "1.3-groovy-2.4",
             "transitive": [
-                "com.netflix.governator:governator-test-spock"
+                "com.netflix.governator:governator-test-spock",
+                "org.spockframework:spock-guice"
             ]
+        },
+        "org.spockframework:spock-guice": {
+            "locked": "1.3-groovy-2.4",
+            "requested": "1.3-groovy-2.4"
         },
         "org.xerial.snappy:snappy-java": {
             "locked": "1.1.7.2",
@@ -6011,7 +6056,7 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-core": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -6032,13 +6077,13 @@
             ]
         },
         "com.amazonaws:aws-java-sdk-sqs": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
         },
         "com.amazonaws:jmespath-java": {
-            "locked": "1.11.796",
+            "locked": "1.11.951",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-kms",
                 "com.amazonaws:aws-java-sdk-s3",
@@ -6073,6 +6118,7 @@
             "locked": "2.10.0",
             "transitive": [
                 "com.fasterxml.jackson.core:jackson-databind",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
                 "com.netflix.eureka:eureka-client",
@@ -6088,6 +6134,7 @@
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml",
                 "com.fasterxml.jackson.datatype:jackson-datatype-joda",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -6105,6 +6152,7 @@
                 "com.amazonaws:aws-java-sdk-core",
                 "com.amazonaws:jmespath-java",
                 "com.fasterxml.jackson.dataformat:jackson-dataformat-xml",
+                "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
                 "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base",
                 "com.fasterxml.jackson.module:jackson-module-jaxb-annotations",
                 "com.netflix.archaius:archaius-core",
@@ -6150,6 +6198,12 @@
             "locked": "2.4.5",
             "transitive": [
                 "io.swagger:swagger-core"
+            ]
+        },
+        "com.fasterxml.jackson.datatype:jackson-datatype-jsr310": {
+            "locked": "2.10.0",
+            "transitive": [
+                "com.netflix.conductor:conductor-client"
             ]
         },
         "com.fasterxml.jackson.jaxrs:jackson-jaxrs-base": {
@@ -6604,13 +6658,13 @@
             ]
         },
         "com.netflix.governator:governator": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test"
             ]
         },
         "com.netflix.governator:governator-api": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-core",
@@ -6619,7 +6673,7 @@
             ]
         },
         "com.netflix.governator:governator-core": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator",
                 "com.netflix.governator:governator-test",
@@ -6627,13 +6681,13 @@
             ]
         },
         "com.netflix.governator:governator-test": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "transitive": [
                 "com.netflix.governator:governator-test-spock"
             ]
         },
         "com.netflix.governator:governator-test-spock": {
-            "locked": "1.17.10",
+            "locked": "1.17.11",
             "requested": "latest.release"
         },
         "com.netflix.netflix-commons:netflix-eventbus": {
@@ -7264,7 +7318,7 @@
             ]
         },
         "net.thisptr:jackson-jq": {
-            "locked": "0.0.11",
+            "locked": "0.0.12",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -7339,7 +7393,7 @@
             ]
         },
         "org.apache.httpcomponents:httpclient": {
-            "locked": "4.5.9",
+            "locked": "4.5.13",
             "transitive": [
                 "com.amazonaws:aws-java-sdk-core",
                 "com.netflix.dyno:dyno-contrib",
@@ -7354,7 +7408,7 @@
             ]
         },
         "org.apache.httpcomponents:httpcore": {
-            "locked": "4.4.11",
+            "locked": "4.4.13",
             "transitive": [
                 "org.apache.httpcomponents:httpclient",
                 "org.elasticsearch.client:elasticsearch-rest-client"
@@ -7509,7 +7563,8 @@
             "requested": "2.4.15",
             "transitive": [
                 "com.cyrusinnovation:mockito-groovy-support",
-                "org.spockframework:spock-core"
+                "org.spockframework:spock-core",
+                "org.spockframework:spock-guice"
             ]
         },
         "org.codehaus.jettison:jettison": {
@@ -7917,8 +7972,13 @@
             "locked": "1.3-groovy-2.4",
             "requested": "1.3-groovy-2.4",
             "transitive": [
-                "com.netflix.governator:governator-test-spock"
+                "com.netflix.governator:governator-test-spock",
+                "org.spockframework:spock-guice"
             ]
+        },
+        "org.spockframework:spock-guice": {
+            "locked": "1.3-groovy-2.4",
+            "requested": "1.3-groovy-2.4"
         },
         "org.xerial.snappy:snappy-java": {
             "locked": "1.1.7.2",
