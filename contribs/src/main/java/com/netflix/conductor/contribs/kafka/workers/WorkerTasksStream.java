@@ -210,7 +210,7 @@ public class WorkerTasksStream implements Runnable {
         // Thread.sleep function is executed so that a consumed message is not sent
         // to Conductor before the server is started
         try {
-            Thread.sleep(10); // 10 millisecond thread sleep
+            Thread.sleep(1); // 10 millisecond thread sleep
         } catch (final InterruptedException e) {
             // Restores the interrupt by the InterruptedException so that caller can see that
             // interrupt has occurred.
