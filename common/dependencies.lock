@@ -45,7 +45,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -83,7 +83,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -143,7 +143,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -181,7 +181,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -241,7 +241,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -279,7 +279,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -402,7 +402,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -440,7 +440,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -500,7 +500,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -538,7 +538,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -598,7 +598,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -652,7 +652,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -728,7 +728,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -782,7 +782,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -858,7 +858,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -912,7 +912,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]
@@ -988,7 +988,7 @@
             ]
         },
         "com.google.guava:guava": {
-            "locked": "29.0-jre",
+            "locked": "30.1-jre",
             "transitive": [
                 "com.github.rholder:guava-retrying"
             ]
@@ -1042,7 +1042,7 @@
             "requested": "3.0"
         },
         "org.checkerframework:checker-qual": {
-            "locked": "2.11.1",
+            "locked": "3.5.0",
             "transitive": [
                 "com.google.guava:guava"
             ]

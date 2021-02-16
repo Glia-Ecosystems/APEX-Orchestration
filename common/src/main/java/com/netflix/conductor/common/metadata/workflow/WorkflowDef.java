@@ -96,6 +96,9 @@ public class WorkflowDef extends Auditable {
 	@NotNull
 	private long timeoutSeconds;
 
+	@ProtoField(id = 14)
+	private Map<String, Object> variables = new HashMap<>();
+
 	/**
 	 * @return the name
 	 */
@@ -150,6 +153,19 @@ public class WorkflowDef extends Auditable {
 	 */
 	public void setInputParameters(List<String> inputParameters) {
 		this.inputParameters = inputParameters;
+	}
+
+	/**
+	 * @return the global workflow variables
+	 */
+	public Map<String, Object> getVariables() {
+		return variables;
+	}
+	/**
+	 * @param vars the set of global workflow variables to set
+	 */
+	public void setVariables(Map<String, Object> vars) {
+		this.variables = vars;
 	}
 
 	/**
@@ -298,6 +314,10 @@ public class WorkflowDef extends Auditable {
 		Iterator<WorkflowTask> it = tasks.iterator();
 		while(it.hasNext()){
 			 WorkflowTask task = it.next();
+			 if (task.getTaskReferenceName().equals(taskReferenceName)) {
+			 	// If taskReferenceName matches, break out
+			 	break;
+			 }
 			 WorkflowTask nextTask = task.next(taskReferenceName, null);
 			 if(nextTask != null){
 				 return nextTask;
@@ -306,7 +326,7 @@ public class WorkflowDef extends Auditable {
 			 	return null;
 			 }
 
-			 if(task.getTaskReferenceName().equals(taskReferenceName) || task.has(taskReferenceName)){
+			 if(task.has(taskReferenceName)){
 				 break;
 			 }
 		}
@@ -347,6 +367,7 @@ public class WorkflowDef extends Auditable {
 			Objects.equals(getTasks(), that.getTasks()) &&
 			Objects.equals(getInputParameters(), that.getInputParameters()) &&
 			Objects.equals(getOutputParameters(), that.getOutputParameters()) &&
+			Objects.equals(getVariables(), that.getVariables()) &&
 			Objects.equals(getFailureWorkflow(), that.getFailureWorkflow()) &&
 			Objects.equals(getOwnerEmail(), that.getOwnerEmail()) &&
 			Objects.equals(getTimeoutSeconds(), that.getTimeoutSeconds());
@@ -362,6 +383,7 @@ public class WorkflowDef extends Auditable {
 				getTasks(),
 				getInputParameters(),
 				getOutputParameters(),
+				getVariables(),
 				getFailureWorkflow(),
 				getSchemaVersion(),
 				getOwnerEmail(),
@@ -378,6 +400,7 @@ public class WorkflowDef extends Auditable {
 			", tasks=" + tasks +
 			", inputParameters=" + inputParameters +
 			", outputParameters=" + outputParameters +
+			", variables=" + variables +
 			", failureWorkflow='" + failureWorkflow + '\'' +
 			", schemaVersion=" + schemaVersion +
 			", restartable=" + restartable +

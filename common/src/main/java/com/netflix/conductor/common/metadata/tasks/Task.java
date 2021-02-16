@@ -741,7 +741,9 @@ public class Task {
         if (StringUtils.isNotBlank(subWorkflowId)) {
             return subWorkflowId;
         } else {
-            return this.getOutputData() != null ? (String) this.getOutputData().get("subWorkflowId") : null;
+            return 
+               	this.getOutputData() != null && (String) this.getOutputData().get("subWorkflowId") != null ? (String) this.getOutputData().get("subWorkflowId") : 
+               	this.getInputData() != null ? (String) this.getInputData().get("subWorkflowId") : null;
         }
     }
 
@@ -796,7 +798,6 @@ public class Task {
    * Note: This does not copy the following fields:
    * <ul>
    * <li>retried</li>
-   * <li>seq</li>
    * <li>updateTime</li>
    * <li>retriedTaskId</li>
    * </ul>
@@ -808,6 +809,7 @@ public class Task {
     deepCopy.setEndTime(endTime);
     deepCopy.setWorkerId(workerId);
     deepCopy.setReasonForIncompletion(reasonForIncompletion);
+    deepCopy.setSeq(seq);
 
     return deepCopy;
   }

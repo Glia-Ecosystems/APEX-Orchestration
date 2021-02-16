@@ -29,7 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
@@ -134,6 +134,7 @@ public class DynoQueueDAO implements QueueDAO {
         if (domain != null) {
             prefix = prefix + "." + domain;
         }
+
         queues = new RedisQueues(dynoClient, dynoClientRead, prefix, ss, 60_000, 60_000);
         logger.info("DynoQueueDAO initialized with prefix " + prefix + "!");
     }
@@ -253,5 +254,12 @@ public class DynoQueueDAO implements QueueDAO {
         DynoQueue queue = queues.get(queueName);
         return queue.setTimeout(id, 0);
 
+    }
+
+    @Override
+    public boolean containsMessage(String queueName, String messageId) {
+        DynoQueue queue = queues.get(queueName);
+        Message message = queue.get(messageId);
+        return Objects.nonNull(message);
     }
 }

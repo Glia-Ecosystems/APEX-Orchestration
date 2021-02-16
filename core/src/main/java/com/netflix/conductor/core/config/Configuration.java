@@ -49,6 +49,9 @@ public interface Configuration {
     String SYSTEM_TASK_WORKER_ISOLATED_THREAD_COUNT_PROPERTY_NAME = "workflow.isolated.system.task.worker.thread.count";
     int SYSTEM_TASK_WORKER_ISOLATED_THREAD_COUNT_DEFAULT_VALUE = 1;
 
+    String SYSTEM_TASK_MAX_POLL_COUNT_PROPERTY_NAME = "workflow.system.task.queue.pollCount";
+    int SYSTEM_TASK_MAX_POLL_COUNT_DEFAULT_VALUE = 1;
+
     String ENVIRONMENT_PROPERTY_NAME = "environment";
     String ENVIRONMENT_DEFAULT_VALUE = "test";
 
@@ -108,6 +111,14 @@ public interface Configuration {
     String EVENT_EXECUTION_PERSISTENCE_TTL_SECS_PROPERTY_NAME = "workflow.event.execution.persistence.ttl.seconds";
     int EVENT_EXECUTION_PERSISTENCE_TTL_SECS_DEFAULT_VALUE = 0;
 
+    String WORKFLOW_ARCHIVAL_TTL_SECS_PROPERTY_NAME = "workflow.archival.ttl.seconds";
+    int WORKFLOW_ARCHIVAL_TTL_SECS_DEFAULT_VALUE = 0;
+
+    String WORKFLOW_ARCHIVAL_DELAY_SECS_PROPERTY_NAME = "workflow.archival.delay.seconds";
+
+    String WORKFLOW_ARCHIVAL_DELAY_QUEUE_WORKER_THREAD_COUNT_PROPERTY_NAME = "workflow.archival.delay.queue.worker.thread.count";
+    int WORKFLOW_ARCHIVAL_DELAY_QUEUE_WORKER_THREAD_COUNT_DEFAULT_VALUE = 5;
+
     String OWNER_EMAIL_MANDATORY_NAME = "workflow.owner.email.mandatory";
     boolean OWNER_EMAIL_MANDATORY_DEFAULT_VALUE = true;
 
@@ -116,6 +127,11 @@ public interface Configuration {
 
     String ELASTIC_SEARCH_DOCUMENT_TYPE_OVERRIDE_PROPERTY_NAME = "workflow.elasticsearch.document.type.override";
     String ELASTIC_SEARCH_DOCUMENT_TYPE_OVERRIDE_DEFAULT_VALUE = "";
+
+    String EVENT_QUEUE_POLL_SCHEDULER_THREAD_COUNT_PROPERTY_NAME = "workflow.event.queue.scheduler.poll.thread.count";
+
+    String WORKFLOW_REPAIR_SERVICE_ENABLED = "workflow.repairservice.enabled";
+    boolean WORKFLOW_REPAIR_SERVICE_ENABLED_DEFAULT_VALUE = false;
 
     //TODO add constants for input/output external payload related properties.
 
@@ -193,6 +209,13 @@ public interface Configuration {
      */
     default int getSystemTaskWorkerIsolatedThreadCount() {
         return getIntProperty(SYSTEM_TASK_WORKER_ISOLATED_THREAD_COUNT_PROPERTY_NAME, SYSTEM_TASK_WORKER_ISOLATED_THREAD_COUNT_DEFAULT_VALUE);
+    }
+
+    /**
+     * @return the max number of system task to poll from queues
+     */
+    default int getSystemTaskMaxPollCount() {
+        return getIntProperty(SYSTEM_TASK_MAX_POLL_COUNT_PROPERTY_NAME, SYSTEM_TASK_MAX_POLL_COUNT_DEFAULT_VALUE);
     }
 
     /**
@@ -326,6 +349,48 @@ public interface Configuration {
     }
 
     /**
+     * @return The time to live in seconds for workflow archiving module. Currently, only RedisExecutionDAO supports it.
+     */
+    default int getWorkflowArchivalTTL() {
+        return getIntProperty(WORKFLOW_ARCHIVAL_TTL_SECS_PROPERTY_NAME, WORKFLOW_ARCHIVAL_TTL_SECS_DEFAULT_VALUE);
+    }
+
+    /**
+     * @return the time to delay the archival of workflow
+     */
+    default int getWorkflowArchivalDelay() {
+        return getIntProperty(WORKFLOW_ARCHIVAL_DELAY_SECS_PROPERTY_NAME, getAsyncUpdateDelay());
+    }
+
+    /**
+     * @return the number of threads to process the delay queue in workflow archival
+     */
+    default int getWorkflowArchivalDelayQueueWorkerThreadCount() {
+        return getIntProperty(WORKFLOW_ARCHIVAL_DELAY_QUEUE_WORKER_THREAD_COUNT_PROPERTY_NAME, WORKFLOW_ARCHIVAL_DELAY_QUEUE_WORKER_THREAD_COUNT_DEFAULT_VALUE);
+    }
+
+
+    /**
+     * @return the number of threads to be use in Scheduler used for polling events from multiple event queues.
+     * By default, a thread count equal to the number of CPU cores is chosen.
+     */
+    default int getEventSchedulerPollThreadCount()
+    {
+        return getIntProperty(EVENT_QUEUE_POLL_SCHEDULER_THREAD_COUNT_PROPERTY_NAME, Runtime.getRuntime().availableProcessors());
+    }
+
+    /**
+     * Configuration to enable {@link com.netflix.conductor.core.execution.WorkflowRepairService}, that tries to keep
+     * ExecutionDAO and QueueDAO in sync, based on the task or workflow state.
+     *
+     * This is disabled by default; To enable, the Queueing layer must implement QueueDAO.containsMessage method.
+     * @return
+     */
+    default boolean isWorkflowRepairServiceEnabled() {
+        return getBooleanProperty(WORKFLOW_REPAIR_SERVICE_ENABLED, WORKFLOW_REPAIR_SERVICE_ENABLED_DEFAULT_VALUE);
+    }
+
+    /**
      * @param name         Name of the property
      * @param defaultValue Default value when not specified
      * @return User defined integer property.
@@ -396,7 +461,13 @@ public interface Configuration {
 	 */
 	Long getMaxWorkflowOutputPayloadSizeThresholdKB();
 
-	/**
+    /**
+     *
+     * @return The maximum threshold of the workflow variables payload size in KB beyond which the task changes will be rejected and the task will be marked as FAILED_WITH_TERMINAL_ERROR
+     */
+    Long getMaxWorkflowVariablesPayloadSizeThresholdKB();
+
+    /**
 	 *
 	 * @return The threshold of the task input payload size in KB beyond which the payload will be stored in {@link com.netflix.conductor.common.utils.ExternalPayloadStorage}
 	 */
@@ -420,12 +491,11 @@ public interface Configuration {
 	 */
 	Long getMaxTaskOutputPayloadSizeThresholdKB();
 
-
     enum DB {
         REDIS, DYNOMITE, MEMORY, REDIS_CLUSTER, MYSQL, POSTGRES, CASSANDRA, REDIS_SENTINEL
     }
 
     enum LOCKING_SERVER {
-        NOOP_LOCK, REDIS, ZOOKEEPER
+        NOOP_LOCK, REDIS, ZOOKEEPER, LOCAL_ONLY
     }
 }

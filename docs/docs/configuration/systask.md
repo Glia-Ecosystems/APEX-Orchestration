@@ -192,6 +192,7 @@ Sub Workflow task allows for nesting a workflow within another workflow.
 |name|type|description|
 |---|---|---|
 | subWorkflowParam | Map[String, Any] | See below |
+| inputParameters | Map[String, Any] | `input` of the sub workflow |
 
 **subWorkflowParam**
 
@@ -199,7 +200,8 @@ Sub Workflow task allows for nesting a workflow within another workflow.
 |---|---|---|
 | name | String | Name of the workflow to execute |
 | version | Integer | Version of the workflow to execute |
-| taskToDomain | Map[String, String] | Allows scheduling the sub workflow's tasks per given mappings. See [Task Domains](configuration/taskdomains/) for instructions to configure taskDomains. | 
+| taskToDomain | Map[String, String] | Allows scheduling the sub workflow's tasks per given mappings. See [Task Domains](configuration/taskdomains/) for instructions to configure taskDomains. |
+| workflowDefinition | [WorkflowDefinition](configuration/workflowdef/) | Allows starting a subworkflow with a dynamic workflow definition. |
 
 **Outputs:**
 
@@ -211,24 +213,44 @@ Sub Workflow task allows for nesting a workflow within another workflow.
 
 ```json
 {
-  "name": "sub_workflow_task",
-  "taskReferenceName": "sub1",
-  "type": "SUB_WORKFLOW",
-  "inputParameters": {
-    "subWorkflowParam": {
-      "name": "deployment_workflow",
-      "version": 1,
-      "taskToDomain": {
-        "*": "mydomain"
-      }
-    },
-    "anythingelse":  "value"
-  }
+	"name": "sub_workflow_task",
+	"taskReferenceName": "sub1",
+	"type": "SUB_WORKFLOW",
+	"inputParameters": {
+		"anything": "${workflow.input.anythingValue}"
+	},
+	"subWorkflowParam": {
+		"name": "deployment_workflow",
+		"version": 1,
+		"taskToDomain": {
+			"*": "mydomain"
+		},
+		"workflowDefinition": {
+			"name": "deployment_workflow",
+			"description": "Deploys to CDN",
+			"version": 1,
+			"tasks": [{
+				"name": "deploy",
+				"taskReferenceName": "d1",
+				"type": "SIMPLE",
+				"inputParameters": {
+					"fileLocation": "${workflow.input.encodeLocation}"
+				}
+			}],
+			"outputParameters": {
+				"cdn_url": "${d1.output.location}"
+			},
+			"failureWorkflow": "cleanup_encode_resources",
+			"restartable": true,
+			"workflowStatusListenerEnabled": true,
+			"schemaVersion": 2
+		}
+	}
 }
 ```
 
 When executed, a ```deployment_workflow``` is executed with its inputs parameters set
-to the inputParameters of the ```sub_workflow_task```.
+to the inputParameters of the ```sub_workflow_task``` and the workflow definition specified.  
 The task is marked as completed upon the completion of the spawned workflow. 
 If the sub-workflow is terminated or fails the task is marked as failure and retried if configured. 
 
@@ -496,9 +518,20 @@ This is particularly helpful in running simple evaluations in Conductor server, 
 
 **Parameters:**
 
-|name|description|Notes|
+|name|type|description|notes|
+|---|---|---|---|
+|scriptExpression|String|Javascript (`Nashorn`) evaluation expression defined as a string. Must return a value.|Must be non-empty.|
+
+Besides `scriptExpression`, any value is accessible as `$.value` for the `scriptExpression` to evaluate.
+
+**Outputs:**
+
+|name|type|description|
 |---|---|---|
-|scriptExpression|Javascript (`Nashorn`) evaluation expression defined as a string. Must return a value.|Must be non-empty String.|
+|result|Map|Contains the output returned by the `scriptExpression`|
+
+The task output can then be referenced in downstream tasks like:
+```"${lambda_test.output.result.testvalue}"```
 
 **Example**
 ``` json
@@ -513,9 +546,6 @@ This is particularly helpful in running simple evaluations in Conductor server, 
 }
 ```
 
-The task output can then be referenced in downstream tasks like:
-```"${lambda_test.output.result.testvalue}"```
-
 
 ## Terminate Task
 
@@ -525,10 +555,16 @@ For example, if you have a decision where the first condition is met, you want t
 
 **Parameters:**
 
-|name|description|Notes|
+|name|type|description|notes|
+|---|---|---|---|
+|terminationStatus|String|can only accept "COMPLETED" or "FAILED"|task cannot be optional|
+|workflowOutput|Any|Expected workflow output||
+
+**Outputs:**
+
+|name|type|description|
 |---|---|---|
-|terminationStatus|can only accept "COMPLETED" or "FAILED"|task cannot be optional|
-|workflowOutput|Expected workflow output||
+|output|Map|The content of `workflowOutput` from the inputParameters. An empty object if `workflowOutput` is not set.|
 
 ```json
 {
@@ -547,11 +583,16 @@ For example, if you have a decision where the first condition is met, you want t
 
 ## Kafka Publish Task
 
-A kafka Publish task is used to push messages to another microservice via kafka
+A kafka Publish task is used to push messages to another microservice via kafka.
 
 **Parameters:**
 
-The task expects an input parameter named ```kafka_request``` as part of the task's input with the following details:
+|name|type|description|
+|---|---|---|
+| kafka_request | kafkaRequest | JSON object (see below) |
+| asyncComplete | Boolean | ```false``` to mark status COMPLETED upon execution ; ```true``` to keep it IN_PROGRESS, wait for an external event (via Conductor or SQS or EventHandler) to complete it. |
+
+```kafkaRequest``` JSON object:
 
 |name|description|
 |---|---|
@@ -566,10 +607,6 @@ The task expects an input parameter named ```kafka_request``` as part of the tas
 
 The producer created in the kafka task is cached. By default the cache size is 10 and expiry time is 120000 ms. To change the defaults following can be modified kafka.publish.producer.cache.size,kafka.publish.producer.cache.time.ms respectively.  
 
-**Kafka Task Output**
-
-Task status transitions to COMPLETED
-
 **Example**
 
 Task sample
@@ -579,6 +616,7 @@ Task sample
   "name": "call_kafka",
   "taskReferenceName": "call_kafka",
   "inputParameters": {
+    "asyncComplete": false,
     "kafka_request": {
       "topic": "userTopic",
       "value": "Message to publish",
@@ -599,58 +637,231 @@ The task is marked as ```FAILED``` if the message could not be published to the 
 
 ## Do While Task
 
-Do While Task allows tasks to be executed in loop until given condition become false. Condition is evaluated using nashorn javascript engine.
-Each iteration of loop over task will be scheduled as taskRefname__iteration. Iteration, any of loopover task's output or input parameters can be used to form a condition.
-Do while task output number of iterations with iteration as key and value as number of iterations. Each iteration's output will be stored as, iteration as key and loopover task's output as value
-Taskname which contains arithmetic operator must not be used in loopCondition. Any of loopOver task can be reference outside do while task same way other tasks are referenced.
-To reference specific iteration's output, ```$.LoopTask['iteration]['first_task']```
-Do while task does NOT support domain or isolation group execution. Nesting of DO_WHILE task is not supported. Loopover task must not be reused in neither workflow nor another DO_WHILE task.
+Sequentially execute a list of task as long as a condition is true. The list of tasks is executed first, before the condition is
+checked (even for the first iteration).
 
+When scheduled, each task of this loop will see its `taskReferenceName` concatenated with `__i`, with `i` being the
+iteration number, starting at 1. Warning: `taskReferenceName` containing arithmetic operators must not be used.
+
+Each task output is stored as part of the `DO_WHILE` task, indexed by the iteration value (see example below), allowing
+the condition to reference the output of a task for a specific iteration (eg. ```$.LoopTask['iteration]['first_task']```)
+
+The `DO_WHILE` task is set to `FAILED` as soon as one of the loopTask fails. In such case retry, iteration starts from 1.
+
+Limitations:
+ - Domain or isolation group execution is unsupported;
+ - Nested `DO_WHILE` is unsupported;
+ - `SUB_WORKFLOW` is unsupported;
+ - Since loopover tasks will be executed in loop inside scope of parent do while task, crossing branching outside of DO_WHILE
+   task is not respected. Branching inside loopover task is supported.
 
 **Parameters:**
 
-|name|description|
-|---|---|
-|loopCondition|condition to be evaluated after every iteration|
-|loopOver|List of tasks that needs to be executed in loop.|
+|name|type|description|
+|---|---|---|
+|loopCondition|String|Condition to be evaluated after every iteration. This is a Javascript expression, evaluated using the Nashorn engine. If an exception occurs during evaluation, the DO_WHILE task is set to FAILED_WITH_TERMINAL_ERROR.|
+|loopOver|List[Task]|List of tasks that needs to be executed as long as the condition is true.|
+
+**Outputs:**
+
+|name|type|description|
+|---|---|---|
+|iteration|Integer|Iteration number: the current one while executing; the final one once the loop is finished|
+|`i`|Map[String, Any]|Iteration number as a string, mapped to the task references names and their output.|
+|*|Any|Any state can be stored here if the `loopCondition` does so. For example `storage` will exist if `loopCondition` is `if ($.LoopTask['iteration'] <= 10) {$.LoopTask.storage = 3; true } else {false}`|
 
 **Example**
 
+The following definition:
 ```json
 {
-            "name": "Loop Task",
-            "taskReferenceName": "LoopTask",
-            "type": "DO_WHILE",
+    "name": "Loop Task",
+    "taskReferenceName": "LoopTask",
+    "type": "DO_WHILE",
+    "inputParameters": {
+      "value": "${workflow.input.value}"
+    },
+    "loopCondition": "if ( ($.LoopTask['iteration'] < $.value ) || ( $.first_task['response']['body'] > 10)) { false; } else { true; }",
+    "loopOver": [
+        {
+            "name": "first task",
+            "taskReferenceName": "first_task",
             "inputParameters": {
-              "value": "${workflow.input.value}"
-            },
-            "loopCondition": "if ( ($.LoopTask['iteration'] < $.value ) || ( $.first_task['response']['body'] > 10)) { false; } else { true; }",
-            "loopOver": [
-                {
-                    "name": "first_task",
-                    "taskReferenceName": "first_task",
-                    "inputParameters": {
-                        "http_request": {
-                            "uri": "http://localhost:8082",
-                            "method": "POST"
-                        }
-                    },
-                    "type": "HTTP"
-                },{
-                    "name": "second_task",
-                    "taskReferenceName": "second_task",
-                    "inputParameters": {
-                        "http_request": {
-                            "uri": "http://localhost:8082",
-                            "method": "POST"
-                        }
-                    },
-                    "type": "HTTP"
+                "http_request": {
+                    "uri": "http://localhost:8082",
+                    "method": "POST"
                 }
-            ],
-            "startDelay": 0,
-            "optional": false
+            },
+            "type": "HTTP"
+        },{
+            "name": "second task",
+            "taskReferenceName": "second_task",
+            "inputParameters": {
+                "http_request": {
+                    "uri": "http://localhost:8082",
+                    "method": "POST"
+                }
+            },
+            "type": "HTTP"
         }
+    ],
+    "startDelay": 0,
+    "optional": false
+}
 ```
-If any of loopover task will be failed then do while task will be failed. In such case retry will start iteration from 1. TaskType SUB_WORKFLOW is not supported as a part of loopover task. Since loopover tasks will be executed in loop inside scope of parent do while task, crossing branching outside of DO_WHILE task will not be respected. Branching inside loopover task will be supported.
-In case of exception while evaluating loopCondition, do while task will be failed with FAILED_WITH_TERMINAL_ERROR.
+
+will produce the following execution, assuming 3 executions occurred (alongside `first_task__1`, `first_task__2`, `first_task__3`,
+`second_task__1`, `second_task__2` and `second_task__3`):
+
+```json
+{
+    "taskType": "DO_WHILE",
+    "outputData": {
+        "iteration": 3,
+        "1": {
+            "first_task": {
+                "response": {},
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            },
+            "second_task": {
+                "response": {},
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            }
+        },
+        "2": {
+            "first_task": {
+                "response": {},
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            },
+            "second_task": {
+                "response": {},
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            }
+        },
+        "3": {
+            "first_task": {
+                "response": {},
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            },
+            "second_task": {
+                "response": {},
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            }
+        }
+    }
+}
+```
+
+## JSON JQ Transform Task
+
+JSON JQ Transform task allows transforming a JSON input to another JSON structure using a query expression.
+
+Check the [Jq manual](https://stedolan.github.io/jq/manual/v1.5/), and the [Jq playground](https://jqplay.org/)
+for more information.
+
+Limitations:
+ - The java implementation support most, but not all jq functions. See [the lib](https://github.com/eiiches/jackson-jq) for details.
+
+**Parameters:**
+
+|name|type|description|
+|---|---|---|
+|queryExpression|String|JQ query expression. Input is the entire `inputParameters` object.|
+
+**Outputs:**
+
+|name|type|description|
+|---|---|---|
+|result|Any|First result returned by the jq expression|
+|resultList|List[Any]|List of all results returned by the jq expression|
+|error|String|Error, if the query throws an error.|
+
+**Example**
+
+The following definition:
+```json
+{
+    "name": "jq_1",
+    "taskReferenceName": "jq_1",
+    "type": "JSON_JQ_TRANSFORM",
+    "inputParameters": {
+    "in1": {
+      "arr": [ "a", "b" ]
+    },
+    "in2": {
+      "arr": [ "c", "d" ]
+    },
+    "queryExpression": "{ out: (.in1.arr + .in2.arr) }"
+    }
+}
+```
+
+will produce the following execution:
+
+```json
+{
+    "name": "jq_1",
+    "type": "task-execution",
+    "taskReferenceName": "jq_1",
+    "taskType": "JSON_JQ_TRANSFORM",
+    "inputData": {
+        "in1": {
+          "arr": [ "a", "b" ]
+        },
+        "in2": {
+          "arr": [ "c", "d" ]
+        },
+        "queryExpression": "{ out: (.in1.arr + .in2.arr) }"
+    },
+    "outputData": {
+        "result": {
+            "out": ["a","b","c","d"]
+        },
+        "resultList": [
+            {
+                "out": ["a","b","c","d"]
+            }
+        ]
+    }
+}
+```
+
+
+## Set Variable Task
+
+This task allows to set workflow variables by creating or updating them with new values.
+Variables can be initialized in the workflow definition as well as during the workflow run.
+Once a variable was initialized it can be read or overwritten with a new value by any other task.
+
+!!!warning
+	There is a hard barrier for variables payload size in KB defined in the JVM system properties (`conductor.max.workflow.variables.payload.threshold.kb`) the default value is `256`. Passing this barrier will fail the task and the workflow.
+
+**Parameters:**
+
+The parameters for this task are the variable names with their respective values.
+
+**Example**
+```json
+{
+  "type": "SET_VARIABLE",
+  "name": "set_stage_start",
+  "taskReferenceName": "set_stage_start",
+  "inputParameters": {
+    "stage": "START"
+  }
+}
+```
+
+Later in that workflow, the variable can be referenced by `"${workflow.variables.stage}"`

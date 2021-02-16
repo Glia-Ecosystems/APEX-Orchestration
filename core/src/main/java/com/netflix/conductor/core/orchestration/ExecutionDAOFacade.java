@@ -14,6 +14,7 @@ package com.netflix.conductor.core.orchestration;
 
 import static com.netflix.conductor.core.execution.WorkflowExecutor.DECIDER_QUEUE;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.events.EventExecution;
 import com.netflix.conductor.common.metadata.tasks.PollData;
@@ -141,16 +142,18 @@ public class ExecutionDAOFacade {
     }
 
     /**
-     * Retrieve all workflow executions with the given correlationId
+     * Retrieve all workflow executions with the given correlationId and workflow type
      * Uses the {@link IndexDAO} to search across workflows if the {@link ExecutionDAO} cannot perform searches across workflows.
      *
+     * @param workflowName, workflow type to be queried
      * @param correlationId the correlation id to be queried
      * @param includeTasks  if true, fetches the {@link Task} data within the workflows
      * @return the list of {@link Workflow} executions matching the correlationId
      */
-    public List<Workflow> getWorkflowsByCorrelationId(String correlationId, boolean includeTasks) {
+    public List<Workflow> getWorkflowsByCorrelationId(String workflowName, String correlationId, boolean includeTasks) {
         if (!executionDAO.canSearchAcrossWorkflows()) {
-            SearchResult<String> result = indexDAO.searchWorkflows("correlationId='" + correlationId + "'", "*", 0, 1000, null);
+        	String query = "correlationId='" + correlationId + "' AND workflowType='" + workflowName + "'";
+            SearchResult<String> result = indexDAO.searchWorkflows(query, "*", 0, 1000, null);
             return result.getResults().stream()
                 .parallel()
                 .map(workflowId -> {
@@ -165,7 +168,7 @@ public class ExecutionDAOFacade {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
         }
-        return executionDAO.getWorkflowsByCorrelationId(correlationId, includeTasks);
+        return executionDAO.getWorkflowsByCorrelationId(workflowName,correlationId, includeTasks);
     }
 
     public List<Workflow> getWorkflowsByName(String workflowName, Long startTime, Long endTime) {
@@ -195,7 +198,7 @@ public class ExecutionDAOFacade {
         executionDAO.createWorkflow(workflow);
         // Add to decider queue
         queueDAO.push(DECIDER_QUEUE, workflow.getWorkflowId(), workflow.getPriority(), config.getSweepFrequency());
-        if (config.enableAsyncIndexing()) {
+        if(config.enableAsyncIndexing()) {
             indexDAO.asyncIndexWorkflow(workflow);
         } else {
             indexDAO.indexWorkflow(workflow);
@@ -248,24 +251,49 @@ public class ExecutionDAOFacade {
         try {
             Workflow workflow = getWorkflowById(workflowId, true);
 
-            if (archiveWorkflow) {
-                if (workflow.getStatus().isTerminal()) {
-                    // Only allow archival if workflow is in terminal state
-                    // DO NOT archive async, since if archival errors out, workflow data will be lost
-                    indexDAO.updateWorkflow(workflowId,
-                        new String[]{RAW_JSON_FIELD, ARCHIVED_FIELD},
-                        new Object[]{objectMapper.writeValueAsString(workflow), true});
-                } else {
-                    throw new ApplicationException(Code.INVALID_INPUT, String.format("Cannot archive workflow: %s with status: %s", workflowId, workflow.getStatus()));
-                }
-            } else {
-                // Not archiving, also remove workflow from index
-                indexDAO.asyncRemoveWorkflow(workflowId);
-            }
-
+            removeWorkflowIndex(workflow, archiveWorkflow);
             // remove workflow from DAO
             try {
                 executionDAO.removeWorkflow(workflowId);
+            } catch (Exception ex) {
+                Monitors.recordDaoError("executionDao", "removeWorkflow");
+                throw ex;
+            }
+        } catch (ApplicationException ae) {
+            throw ae;
+        } catch (Exception e) {
+            throw new ApplicationException(ApplicationException.Code.BACKEND_ERROR, "Error removing workflow: " + workflowId, e);
+        }
+    }
+
+    private void removeWorkflowIndex(Workflow workflow , boolean archiveWorkflow) throws JsonProcessingException {
+        if (archiveWorkflow) {
+            if (workflow.getStatus().isTerminal()) {
+                // Only allow archival if workflow is in terminal state
+                // DO NOT archive async, since if archival errors out, workflow data will be lost
+                indexDAO.updateWorkflow(workflow.getWorkflowId(),
+                        new String[]{RAW_JSON_FIELD, ARCHIVED_FIELD},
+                        new Object[]{objectMapper.writeValueAsString(workflow), true});
+            } else {
+                throw new ApplicationException(Code.INVALID_INPUT, String.format("Cannot archive workflow: %s with status: %s",
+                        workflow.getWorkflowId(),
+                        workflow.getStatus()));
+            }
+        } else {
+            // Not archiving, also remove workflow from index
+            indexDAO.asyncRemoveWorkflow(workflow.getWorkflowId());
+        }
+    }
+
+    public void removeWorkflowWithExpiry(String workflowId, boolean archiveWorkflow, int ttlSeconds)
+    {
+        try {
+            Workflow workflow = getWorkflowById(workflowId, true);
+
+            removeWorkflowIndex(workflow, archiveWorkflow);
+            // remove workflow from DAO with TTL
+            try {
+                executionDAO.removeWorkflowWithExpiry(workflowId, ttlSeconds);
             } catch (Exception ex) {
                 Monitors.recordDaoError("executionDao", "removeWorkflow");
                 throw ex;
@@ -285,7 +313,7 @@ public class ExecutionDAOFacade {
      */
     public void resetWorkflow(String workflowId) {
         try {
-            Workflow workflow = getWorkflowById(workflowId, true);
+            getWorkflowById(workflowId, true);
             executionDAO.removeWorkflow(workflowId);
             if (config.enableAsyncIndexing()) {
                 indexDAO.asyncRemoveWorkflow(workflowId);
@@ -368,6 +396,10 @@ public class ExecutionDAOFacade {
 
     public List<PollData> getTaskPollData(String taskName) {
         return pollDataDAO.getPollData(taskName);
+    }
+
+    public List<PollData> getAllPollData() {
+        return pollDataDAO.getAllPollData();
     }
 
     public PollData getTaskPollDataByDomain(String taskName, String domain) {

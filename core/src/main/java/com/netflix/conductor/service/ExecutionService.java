@@ -1,17 +1,14 @@
 /*
- * Copyright 2016 Netflix, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2020 Netflix, Inc.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 package com.netflix.conductor.service;
 
@@ -20,6 +17,7 @@ import com.netflix.conductor.common.metadata.events.EventExecution;
 import com.netflix.conductor.common.metadata.tasks.PollData;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.Task.Status;
+import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.tasks.TaskExecLog;
 import com.netflix.conductor.common.metadata.tasks.TaskResult;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
@@ -44,6 +42,7 @@ import com.netflix.conductor.metrics.Monitors;
 import com.netflix.conductor.service.utils.ServiceUtils;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -145,9 +144,16 @@ public class ExecutionService {
 				}
 
 				if (executionDAOFacade.exceedsInProgressLimit(task)) {
-					// Postpone a message, so that it would be available for poll again.
+					// Postpone this message, so that it would be available for poll again.
 					queueDAO.postpone(queueName, taskId, task.getWorkflowPriority(), queueTaskMessagePostponeSeconds);
 					logger.debug("Postponed task: {} in queue: {} by {} seconds", taskId, queueName, queueTaskMessagePostponeSeconds);
+					continue;
+				}
+				TaskDef taskDef = task.getTaskDefinition().isPresent() ? task.getTaskDefinition().get() : null;
+				if (task.getRateLimitPerFrequency() > 0 && executionDAOFacade.exceedsRateLimitPerFrequency(task, taskDef)) {
+					// Postpone this message, so that it would be available for poll again.
+					queueDAO.postpone(queueName, taskId, task.getWorkflowPriority(), queueTaskMessagePostponeSeconds);
+					logger.debug("RateLimit Execution limited for {}:{}, limit:{}", taskId, task.getTaskDefName(), task.getRateLimitPerFrequency());
 					continue;
 				}
 
@@ -190,19 +196,22 @@ public class ExecutionService {
 	}
 
 	public List<PollData> getAllPollData() {
-		Map<String, Long> queueSizes = queueDAO.queuesDetail();
-		List<PollData> allPollData = new ArrayList<>();
-		queueSizes.keySet().forEach(k -> {
-			try {
-				if(!k.contains(QueueUtils.DOMAIN_SEPARATOR)){
-					allPollData.addAll(getPollData(QueueUtils.getQueueNameWithoutDomain(k)));
+		try {
+			return executionDAOFacade.getAllPollData();
+		} catch(UnsupportedOperationException uoe) {
+			List<PollData> allPollData = new ArrayList<>();
+			Map<String, Long> queueSizes = queueDAO.queuesDetail();
+			queueSizes.keySet().forEach(k -> {
+				try {
+					if(!k.contains(QueueUtils.DOMAIN_SEPARATOR)){
+						allPollData.addAll(getPollData(QueueUtils.getQueueNameWithoutDomain(k)));
+					}
+				} catch (Exception e) {
+					logger.error("Unable to fetch all poll data!", e);
 				}
-			} catch (Exception e) {
-				logger.error("Unable to fetch all poll data!", e);
-			}
-		});
-		return allPollData;
-
+			});
+			return allPollData;
+		}
 	}
 
 	public void terminateWorkflow(String workflowId, String reason) {
@@ -342,15 +351,20 @@ public class ExecutionService {
 
 	public List<Workflow> getWorkflowInstances(String workflowName, String correlationId, boolean includeClosed, boolean includeTasks) {
 
-		List<Workflow> workflows = executionDAOFacade.getWorkflowsByCorrelationId(correlationId, includeTasks);
-		List<Workflow> result = new LinkedList<>();
-		for (Workflow wf : workflows) {
-			if (wf.getWorkflowName().equals(workflowName) && (includeClosed || wf.getStatus().equals(Workflow.WorkflowStatus.RUNNING))) {
-				result.add(wf);
+		List<Workflow> workflows = executionDAOFacade.getWorkflowsByCorrelationId(workflowName, correlationId, false);
+		return workflows.stream().parallel().filter(wf -> {
+			if (includeClosed || wf.getStatus().equals(Workflow.WorkflowStatus.RUNNING)) {
+				// including tasks for subset of workflows to increase performance
+				if (includeTasks) {
+					List<Task> tasks = executionDAOFacade.getTasksForWorkflow(wf.getWorkflowId());
+					tasks.sort(Comparator.comparingInt(Task::getSeq));
+					wf.setTasks(tasks);
+				}
+				return true;
+			} else {
+				return false;
 			}
-		}
-
-		return result;
+		}).collect(Collectors.toList());
 	}
 
 	public Workflow getExecutionStatus(String workflowId, boolean includeTasks) {

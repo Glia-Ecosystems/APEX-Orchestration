@@ -79,6 +79,11 @@ public class TestConfiguration implements AzureBlobConfiguration {
     }
 
     @Override
+    public boolean isEventExecutionIndexingEnabled() {
+        return true;
+    }
+
+    @Override
     public String getProperty(String string, String def) {
         return def;
     }
@@ -121,6 +126,11 @@ public class TestConfiguration implements AzureBlobConfiguration {
     @Override
     public Long getMaxWorkflowOutputPayloadSizeThresholdKB() {
         return 10240L;
+    }
+
+    @Override
+    public Long getMaxWorkflowVariablesPayloadSizeThresholdKB() {
+        return 256L;
     }
 
     @Override
