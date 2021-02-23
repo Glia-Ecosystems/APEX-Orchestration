@@ -8,6 +8,7 @@ import java.util.Map;
  */
 public class RequestContainer {
 
+    private final String key;
     private final String resourceURI;
     private final String httpMethod;
     private final Object entity;
@@ -15,12 +16,23 @@ public class RequestContainer {
     private boolean deserializationErrorOccurred;
     private String deserializationError;
 
-    public RequestContainer(final String resourceURI, final String httpMethod, final Object entity) {
+    public RequestContainer(final String key, final String resourceURI, final String httpMethod,
+                            final Object entity) {
+        this.key = key;
         this.resourceURI = resourceURI;
         this.httpMethod = httpMethod;
         this.entity = entity;
         this.deserializationErrorOccurred = false;
         this.deserializationError = "";
+    }
+
+    /**
+     * Get the key provided with the request
+     *
+     * @return Key of request
+     */
+    public String getKey() {
+        return key;
     }
 
     /**
@@ -91,6 +103,7 @@ public class RequestContainer {
      */
     public Map<String, Object> getRequestData() {
         final Map<String, Object> requestData = new HashMap<>();
+        requestData.put("key", key);
         requestData.put("resourceURI", resourceURI);
         requestData.put("httpMethod", httpMethod);
         requestData.put("entity", entity);
@@ -105,7 +118,8 @@ public class RequestContainer {
     @Override
     public String toString() {
         return "RequestContainer{" +
-                "resourceURI='" + resourceURI + '\'' +
+                "key='" + key + '\'' +
+                ", resourceURI='" + resourceURI + '\'' +
                 ", httpMethod='" + httpMethod + '\'' +
                 ", entity=" + entity +
                 '}';

@@ -77,32 +77,26 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         // Source Node (Responsible for consuming the records from a given topic, that will be processed)
         KStream<String, RequestContainer> registerStream = builder.stream(registerWorkersConsumerTopic,
                 Consumed.with(Serdes.String(), requestContainerSerde))
-                .peek((k, v) -> logger.info("Worker {} requesting registration to Conductor: {}", k, v));
+                .peek((k, v) -> logger.info("Worker {} requesting registration to Conductor: {}", v.getKey(), v));
         // Branch Processor Node
         // Each record is matched against the given predicates in the order that they're provided.
         // The branch processor will assign records to a stream on the first match.
         // WARNING: No attempts are made to match additional predicates.
-        // If a no key given error occurs, send error to client who made initial request
         // Filters processing of request, if any key or value errors occur when containerising/deserializing request
         // send error to service, else process request
         // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
         // if predicate is true.
-        Predicate<String, RequestContainer> keyError = (serviceName, request) -> serviceName.isEmpty();
         Predicate<String, RequestContainer> errorOccurred = (serviceName, request) -> request.isDeserializationErrorOccurred();
         // If the URI sent is not an expected URI for this topic, send error to client who made initial request to topic
-        Predicate<String, RequestContainer> uniqueURIError = (clientId, request) -> !request.getResourceURI().contains("/metadata/taskdefs");
+        Predicate<String, RequestContainer> uniqueURIError = (serviceName, request) -> !request.getResourceURI().contains("/metadata/taskdefs");
         Predicate<String, RequestContainer> readyToRegister = (serviceName, request) -> !request.isDeserializationErrorOccurred();
-        KStream<String, RequestContainer>[] executeDept = registerStream.branch(keyError, errorOccurred, uniqueURIError, readyToRegister);
-        KStream<String, ResponseContainer> processedKeyError = executeDept[0]
-                .mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
-        KStream<String, ResponseContainer> processedValueError = executeDept[1]
+        KStream<String, RequestContainer>[] executeDept = registerStream.branch(errorOccurred, uniqueURIError, readyToRegister);
+        KStream<String, ResponseContainer> processedValueError = executeDept[0]
                 .mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
-        KStream<String, ResponseContainer> processedURIError = executeDept[2]
+        KStream<String, ResponseContainer> processedURIError = executeDept[1]
                 .mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
-        KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[3]
+        KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[2]
                 .mapValues(resourceHandler::processRequest);
-        // If key or value error occurred, return error to service
-        processedKeyError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedURIError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         // Branch Processor Node
@@ -113,7 +107,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         Predicate<String, ResponseContainer> registrationUnSuccessful = (serviceName, response) -> response.getStatus() != 200;
         KStream<String, ResponseContainer>[] successDept = processedRegistrationOfWorker.branch(registrationSuccessful,
                 registrationUnSuccessful);
-        successDept[0].mapValues(workersTaskStreamFactory::createWorkerTaskStream)
+        successDept[0].mapValues((serviceName, response) -> workersTaskStreamFactory.createWorkerTaskStream(response.getKey(), response))
                 .to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
         successDept[1].to(registerWorkersProducerTopic, Produced.with(Serdes.String(),
                 responseContainerSerde));
@@ -159,6 +153,9 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         KafkaStreams registerWorkerStream = buildKafkaStream(registerWorkersTopology);
         // Sleep Thread to make sure the server is up before processing requests to Conductor
         sleepThread();
+        // Verify if registered workers, if so, start task streams for currently registered workers
+        logger.info("Verifying if there are any workers registered already");
+        workersTaskStreamFactory.verifyExistingWorkersAndCreateTaskStreams();
         // Start stream
         logger.info("Starting Kafka Streams for registering workers to Conductor");
         registerWorkerStream.start();

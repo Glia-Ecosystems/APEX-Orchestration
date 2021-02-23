@@ -13,37 +13,46 @@ public class WorkerHeartbeat {
         this.deserializationError = "";
     }
 
+    /**
+     *  Get the heartbeat timestamp
+     *
+     * @return Heartbeat TimeStamp MS
+     */
     public Long getHeartbeatTimeStampMS() {
         return heartbeatTimeStampMS;
     }
 
     /**
+     * Get indication of if an error occurred during deserialization of request
      *
-     * @return
+     * @return Indicator if an error occurred or not
      */
     public boolean isDeserializationErrorOccurred() {
         return deserializationErrorOccurred;
     }
 
     /**
+     * Set indication of if an error occurred during deserialization of request
      *
-     * @param deserializationErrorOccurred
+     * @param deserializationErrorOccurred Indicator if an error occurred
      */
     public void setDeserializationErrorOccurred(boolean deserializationErrorOccurred) {
         this.deserializationErrorOccurred = deserializationErrorOccurred;
     }
 
     /**
+     * Get error message that occurred during deserialization of request
      *
-     * @return
+     * @return Error message of error that occurred during deserialization of request
      */
     public String getDeserializationError() {
         return deserializationError;
     }
 
     /**
+     * Set error message that occurred during deserialization of request
      *
-     * @param deserializationError
+     * @param deserializationError Error message of error that occurred during deserialization of request
      */
     public void setDeserializationError(String deserializationError) {
         this.deserializationError = deserializationError;

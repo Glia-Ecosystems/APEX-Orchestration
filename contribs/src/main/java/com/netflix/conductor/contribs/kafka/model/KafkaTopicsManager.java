@@ -24,7 +24,7 @@ public class KafkaTopicsManager {
     public KafkaTopicsManager(final Configuration configuration, final KafkaPropertiesProvider kafkaPropertiesProvider){
         this.requestTimeoutMS = configuration.getIntProperty("topic.manager.kafka.request.timeout.ms", 10000);
         this.numOfPartitions = configuration.getIntProperty("topic.manager.kafka.num.of.partitions", 3);
-        this.numOfReplications = (short) configuration.getIntProperty("topic.manager.kafka.num.of.replications", 1);
+        this.numOfReplications = (short) configuration.getIntProperty("topic.manager.kafka.num.of.replications", 3);
         adminClient = AdminClient.create(kafkaPropertiesProvider.getAdminProperties());
     }
 

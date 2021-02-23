@@ -1,5 +1,6 @@
 package com.netflix.conductor.contribs.kafka.workers;
 
+import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
@@ -28,19 +29,20 @@ public class ActiveWorkersMonitor {
     private final Properties statusListenerProperties;
     private final WorkerHeartbeatSerde workerHeartbeatSerde;
     private final ResourceHandler resourceHandler;
-    private final Timer timer;
     private final String workersHeartbeatTopic;
     private final long workerInactiveTimer;
+    private Timer timer;
 
     public ActiveWorkersMonitor(final Configuration configuration,  final KafkaTopicsManager kafkaTopicsManager,
                                 final ResourceHandler resourceHandler, final KafkaPropertiesProvider kafkaPropertiesProvider){
         this.resourceHandler = resourceHandler;
         this.activeWorkers = new LinkedHashSet<>();
         this.workersStatus = new HashMap<>();
-        this.timer = new Timer();
         this.workerHeartbeatSerde = new WorkerHeartbeatSerde();
         this.workersHeartbeatTopic = getWorkersHeartbeatTopic(configuration, kafkaTopicsManager);
-        this.statusListenerProperties = kafkaPropertiesProvider.getStreamsProperties("status-listener");
+        // Adding unique ID to kafka stream, status listener application ID, to allow for each instance of Conductor
+        // to receive each status (heartbeat) sent to the respective topic
+        this.statusListenerProperties = kafkaPropertiesProvider.getStreamsProperties("status-listener-" + UUID.randomUUID().toString().substring(0, 7));
         this.workerInactiveTimer = configuration.getLongProperty("worker.inactive.ms", 120000);
         startWorkersStatusListenerStream();
     }
@@ -81,7 +83,7 @@ public class ActiveWorkersMonitor {
      */
     private void unregisterWorker(final String taskName){
         String path = "/metadata/taskdefs/" + taskName;
-        ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer(path, "DELETE", ""));
+        ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer("", path, "DELETE", ""));
         if (responseContainer.getStatus() == 200){
             logger.debug("Unregistered Task Definition: {}", taskName);
         } else {
@@ -89,6 +91,24 @@ public class ActiveWorkersMonitor {
                     taskName, responseContainer.getResponseErrorMessage());
         }
     }
+
+    /**
+     *  Get all registered task definitions
+     *
+     * @return List of registered task definitions
+     */
+    @SuppressWarnings("unchecked")
+    public List<TaskDef> getExistingTaskDefinitions() {
+        ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer("", "/metadata/taskdefs", "GET", ""));
+        if (responseContainer.getStatus() == 200) {
+            return (List<TaskDef>) responseContainer.getResponseEntity();
+        } else {
+            logger.debug("Error occurred getting registered task definitions. Error: {}",
+                    responseContainer.getResponseErrorMessage());
+            return new ArrayList<>();
+        }
+    }
+
 
     /**
      * Checks if any workers/services are in active, by checking if a heartbeat has been received
@@ -113,6 +133,7 @@ public class ActiveWorkersMonitor {
      */
     private void startInActiveWorkerMonitor(){
         if (!inactiveWorkerMonitorRunning){
+            timer = new Timer();  // Instantiation of timer here allows for a timer to be canceled and started dynamically
             TimerTask checkForInActiveWorkers = new TimerTask() {
                 @Override
                 public void run() {
