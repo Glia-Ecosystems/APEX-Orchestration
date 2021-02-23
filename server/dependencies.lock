@@ -1235,7 +1235,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -3011,7 +3011,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -4787,7 +4787,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -6563,7 +6563,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -9407,7 +9407,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -11183,7 +11183,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -12956,7 +12956,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -14713,7 +14713,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -16511,7 +16511,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -18309,7 +18309,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
@@ -20107,7 +20107,7 @@
             ]
         },
         "org.apache.kafka:kafka-clients": {
-            "locked": "2.2.0",
+            "locked": "2.7.0",
             "transitive": [
                 "com.netflix.conductor:conductor-contribs"
             ]
