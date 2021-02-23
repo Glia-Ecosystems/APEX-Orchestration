@@ -23,6 +23,7 @@ public class WorkersTaskStreamFactory {
     private final KafkaPropertiesProvider kafkaPropertiesProvider;
     private final Properties producerProperties;
     private final int pollBatchSize;
+    private final int taskPollingInterval;
     private final ResourceHandler resourceHandler;
     private final ObjectMapper objectMapper;
 
@@ -36,6 +37,7 @@ public class WorkersTaskStreamFactory {
         this.activeWorkersMonitor = activeWorkersMonitor;
         this.producerProperties = kafkaPropertiesProvider.getProducerProperties();
         this.pollBatchSize = configuration.getIntProperty("conductor.kafka.workers.listener.poll.batch.size", 30);
+        this.taskPollingInterval = configuration.getIntProperty("conductor.kafka.workers.task.stream.task.polling.interval", 1);
         this.threadPool = Executors.newFixedThreadPool(configuration.getIntProperty("conductor.kafka.workers.listener.thread.pool", 30));
     }
 
@@ -70,7 +72,7 @@ public class WorkersTaskStreamFactory {
     private void startWorkerTaskStream(final String workerName, final String taskName, final Map<String, String> topics){
         Properties responseStreamProperties = kafkaPropertiesProvider.getStreamsProperties("response-" + workerName);
         threadPool.execute(new WorkerTasksStream(resourceHandler, responseStreamProperties, producerProperties,
-                activeWorkersMonitor, workerName, taskName, topics, pollBatchSize));
+                activeWorkersMonitor, workerName, taskName, topics, pollBatchSize, taskPollingInterval));
 
     }
 
@@ -96,5 +98,25 @@ public class WorkersTaskStreamFactory {
         topics.put("updateTopic", worker + "-" + UPDATE_TOPIC);
         topics.put("statusTopic", worker + "-" + STATUS_TOPIC);
         return topics;
+    }
+
+    /**
+     * Verifies if there are workers/services registered to Conductor already upon start up of
+     * the server. If so, start task streams for workers.
+     *
+     * NOTE - This function should only be used once upon start up of the server
+     */
+    public void verifyExistingWorkersAndCreateTaskStreams(){
+        List<TaskDef> taskDefs = activeWorkersMonitor.getExistingTaskDefinitions();
+        if (!taskDefs.isEmpty()){
+            for (TaskDef taskDef: taskDefs){
+                // Capitalize worker name
+                String worker = taskDef.getName().substring(0, 1).toUpperCase() + taskDef.getName().substring(1);
+                Map<String, String> topics = generateServiceTopics(worker);
+                activeWorkersMonitor.addActiveWorker(worker, taskDef.getName());  // Adds worker to active workers collection
+                startWorkerTaskStream(worker, taskDef.getName(), topics);
+            }
+        }
+
     }
 }

@@ -27,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class WorkerTasksStream implements Runnable {
 
@@ -36,7 +34,6 @@ public class WorkerTasksStream implements Runnable {
     private final KafkaProducer<String, String> producer;
     private final Properties responseStreamProperties;
     private final ResourceHandler resourceHandler;
-    private final ExecutorService taskPublishPool;
     private final ActiveWorkersMonitor activeWorkersMonitor;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
@@ -47,6 +44,7 @@ public class WorkerTasksStream implements Runnable {
     private final String updateTopic;
     private final String statusTopic;
     private final int pollBatchSize;
+    private final int taskPollingInterval;
     private final Gson gson;
     private KafkaStreams tasksStream;
 
@@ -54,7 +52,7 @@ public class WorkerTasksStream implements Runnable {
     public WorkerTasksStream(final ResourceHandler resourceHandler, final Properties responseStreamProperties,
                              final Properties producerProperties, final ActiveWorkersMonitor activeWorkersMonitor,
                              final String worker, final String taskName, final Map<String, String> topics,
-                             final int pollBatchSize){
+                             final int pollBatchSize, final int taskPollingInterval){
         this.resourceHandler = resourceHandler;
         this.worker = worker;
         this.taskName = taskName;
@@ -68,8 +66,7 @@ public class WorkerTasksStream implements Runnable {
         this.responseContainerSerde = new ResponseContainerSerde();
         this.producer = new KafkaProducer<>(producerProperties);
         this.pollBatchSize = pollBatchSize;
-        this.taskPublishPool = Executors.newFixedThreadPool(pollBatchSize);
-
+        this.taskPollingInterval = taskPollingInterval;
     }
 
     /**
@@ -86,27 +83,23 @@ public class WorkerTasksStream implements Runnable {
         StreamsBuilder builder = new StreamsBuilder();
         KStream<String, RequestContainer> taskStream = builder.stream(updateTopic, Consumed.with(Serdes.String(),
                 requestContainerSerde));
-        Predicate<String, RequestContainer> keyError = (workerName, request) -> workerName.isEmpty();
-        Predicate<String, RequestContainer> errorOccurred = (workerName, request) ->
+        Predicate<String, RequestContainer> errorOccurred = (key, request) ->
                 request.isDeserializationErrorOccurred();
-        Predicate<String, RequestContainer> uniqueURIError = (clientId, request) ->
+        Predicate<String, RequestContainer> uniqueURIError = (key, request) ->
                 !request.getResourceURI().contains("/tasks");
-        Predicate<String, RequestContainer> continueTaskStream = (workerName, request) ->
+        Predicate<String, RequestContainer> continueTaskStream = (key, request) ->
                 !request.isDeserializationErrorOccurred();
         // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
         // if predicate is true.
-        KStream<String, RequestContainer>[] executeDept = taskStream.branch(keyError, errorOccurred, uniqueURIError,
+        KStream<String, RequestContainer>[] executeDept = taskStream.branch(errorOccurred, uniqueURIError,
                 continueTaskStream);
-        KStream<String, ResponseContainer> processedKeyError = executeDept[0].
-                mapValues(KafkaStreamsDeserializationExceptionHandler::processKeyError);
-        KStream<String, ResponseContainer> processedValueError = executeDept[1].
+        KStream<String, ResponseContainer> processedValueError = executeDept[0].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
-        KStream<String, ResponseContainer> processedURIError = executeDept[2].
+        KStream<String, ResponseContainer> processedURIError = executeDept[1].
                     mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
-        KStream<String, ResponseContainer> processedTask = executeDept[3].
+        KStream<String, ResponseContainer> processedTask = executeDept[2].
                 mapValues(resourceHandler::processRequest);
         processedTask.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedKeyError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedValueError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         processedURIError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
         return builder.build();
@@ -149,8 +142,8 @@ public class WorkerTasksStream implements Runnable {
             ResponseContainer responseContainer = batchPollTasks();
             List<Task> batchTasks = (List<Task>) responseContainer.getResponseEntity();
             if (batchTasks != null && !batchTasks.isEmpty()){
-                // Use multithreading to publish batch of tasks to task queue topic for worker/service
-                batchTasks.forEach(task -> taskPublishPool.execute(() -> publishTask(worker, gson.toJson(task))));
+                // Publish batch of tasks to task queue topic for worker/service
+                batchTasks.forEach(task -> publishTask(gson.toJson(task)));
             }
             pollingInterval();
         }
@@ -163,18 +156,17 @@ public class WorkerTasksStream implements Runnable {
      */
     private ResponseContainer batchPollTasks(){
         String path = "/tasks/poll/batch/" + taskName + "?count=" + pollBatchSize;
-        return resourceHandler.processRequest(new RequestContainer(path, "GET", ""));
+        return resourceHandler.processRequest(new RequestContainer("", path, "GET", ""));
     }
 
     /**
      * Publish the task to the task queue topic for worker/service.
      *
-     * @param service Key (service name) of the record to be publish
      * @param task Value (task) of the record to be publish
      */
-    public void publishTask(final String service, final String task) {
+    public void publishTask(final String task) {
         final RecordMetadata metadata;
-        final ProducerRecord<String, String> record = new ProducerRecord<>(tasksTopic, service, task);
+        final ProducerRecord<String, String> record = new ProducerRecord<>(tasksTopic, task);
         try {
             metadata = producer.send(record).get();
             final String producerLogging = "Producer Record: key " + record.key() + ", value " + record.value() +
@@ -210,7 +202,7 @@ public class WorkerTasksStream implements Runnable {
         // Thread.sleep function is executed so that a consumed message is not sent
         // to Conductor before the server is started
         try {
-            Thread.sleep(10); // 10 millisecond thread sleep
+            Thread.sleep(taskPollingInterval);
         } catch (final InterruptedException e) {
             // Restores the interrupt by the InterruptedException so that caller can see that
             // interrupt has occurred.

@@ -84,25 +84,27 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
                 if (request == null){
                     // If record sent is null
                     errorMessage = "Conductor API request message sent via conductor is Null";
-                    RequestContainer requestContainer = new RequestContainer("", "", null);
+                    RequestContainer requestContainer = new RequestContainer("", "", "", null);
                     requestContainer.setDeserializationErrorOccurred(true);
                     requestContainer.setDeserializationError(errorMessage);
                     return requestContainer;
                 }
                 // Verifies client message for Conductor
                 if (requestMessageErrors(request)) {
+                    final String key = (String) request.get("key");
                     final String path = (String) request.get("path");
                     final String method = (String) request.get("method");
-                    RequestContainer requestContainer = new RequestContainer(path, method, request.get("request"));
+                    RequestContainer requestContainer = new RequestContainer(key, path, method, request.get("request"));
                     requestContainer.setDeserializationErrorOccurred(true);
                     requestContainer.setDeserializationError(errorMessage);
                     return requestContainer;
                 }
                 // Get the necessary info from the request message for sending to the Conductor API
+                final String key = (String) request.get("key");
                 final String path = verifyRequestedURIPath((String) request.get("path"));
                 final String method = verifyRequestedHTTPMethod((String) request.get("method"));
                 final Object entity = request.get("request");
-                return new RequestContainer(path, method, entity);
+                return new RequestContainer(key, path, method, entity);
             }
 
             @Override
@@ -118,7 +120,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @param path Given URI from client request
      * @return URI for requested resource
      */
-    public String verifyRequestedURIPath(final String path) {
+    private String verifyRequestedURIPath(final String path) {
         return path.startsWith("/") ? path : "/" + path;
     }
 
@@ -128,7 +130,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @param httpMethod Given HTTP method from client request
      * @return Upper Case HTTP method
      */
-    public String verifyRequestedHTTPMethod(final String httpMethod) {
+    private String verifyRequestedHTTPMethod(final String httpMethod) {
         return httpMethod.toUpperCase();
     }
 
@@ -137,8 +139,12 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      * @param requestMessage Map object of the request message sent to the Conductor API via Kafka
      * @return Indicator of if the message contains all required information.
      */
-    public boolean requestMessageErrors(final Map<String, ?> requestMessage){
-        if (requestMessage.get("path") == null || requestMessage.get("path") == "") {
+    private boolean requestMessageErrors(final Map<String, ?> requestMessage){
+        if (requestMessage.get("key") == null || requestMessage.get("key") == "") {
+            errorMessage = "Conductor API request message sent via kafka contain missing/empty key";
+            logger.error("Conductor API request message sent via kafka contain missing/empty key");
+            return true;
+        } else if (requestMessage.get("path") == null || requestMessage.get("path") == "") {
             errorMessage = "Conductor API request message sent via kafka contain missing/empty URI path";
             logger.error("Conductor API request message sent via kafka contain missing/empty URI path");
             return true;

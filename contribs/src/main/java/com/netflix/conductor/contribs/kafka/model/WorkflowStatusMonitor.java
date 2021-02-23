@@ -29,11 +29,13 @@ public class WorkflowStatusMonitor implements Runnable {
     private final String clientID;
     private final String workflowID;
     private final String responsesTopic;
+    private final int workflowStatusPollingInterval;
     private Object currentStatus;
+
 
     public WorkflowStatusMonitor(final ResourceHandler resourceHandler, final ObjectMapper objectMapper,
                                  final KafkaProducer<String, String> producer, final String responsesTopic,
-                                 final String clientID, final String workflowID) {
+                                 final String clientID, final String workflowID, final int workflowStatusPollingInterval) {
         this.resourceHandler = resourceHandler;
         this.objectMapper = objectMapper;
         this.gson = new Gson();
@@ -41,6 +43,7 @@ public class WorkflowStatusMonitor implements Runnable {
         this.responsesTopic = responsesTopic;
         this.clientID = clientID;
         this.workflowID = workflowID;
+        this.workflowStatusPollingInterval = workflowStatusPollingInterval;
         this.currentStatus = "";
     }
 
@@ -51,7 +54,7 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private ResponseContainer requestWorkflowStatus(){
         String path = "/workflow/" + workflowID;
-        return resourceHandler.processRequest(new RequestContainer(path, "GET", ""));
+        return resourceHandler.processRequest(new RequestContainer(clientID, path, "GET", ""));
     }
 
     /**
@@ -60,7 +63,7 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private void retryLastTask(){
         String path = "/workflow/" + workflowID + "/retry";
-        resourceHandler.processRequest(new RequestContainer(path, "POST", ""));
+        resourceHandler.processRequest(new RequestContainer(clientID, path, "POST", ""));
     }
 
     /**
@@ -101,7 +104,7 @@ public class WorkflowStatusMonitor implements Runnable {
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      */
     private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
-        publishMessage(clientID, gson.toJson(responseContainer.getResponseData()));
+        publishStatusMessage(gson.toJson(responseContainer.getResponseData()));
     }
 
     /**
@@ -117,12 +120,10 @@ public class WorkflowStatusMonitor implements Runnable {
     /**
      * Publish the messages to the given topic.
      *
-     * @param key Key of the record to be publish
      * @param value Value of the record to be publish
      */
-    public void publishMessage(final String key, final String value) {
-        final ProducerRecord<String, String> record = new ProducerRecord<>(responsesTopic, key,
-                value);
+    public void publishStatusMessage(final String value) {
+        final ProducerRecord<String, String> record = new ProducerRecord<>(responsesTopic, value);
         final RecordMetadata metadata;
         try {
             metadata = producer.send(record).get();
@@ -136,7 +137,7 @@ public class WorkflowStatusMonitor implements Runnable {
             logger.error("Publish message to kafka topic {} failed with an error: {}", responsesTopic, e.getMessage(), e);
             throw new ApplicationException(ApplicationException.Code.INTERNAL_ERROR, "Failed to publish the event");
         }
-        logger.info("Message published to kafka topic {}. key/client {}", responsesTopic, key);
+        logger.info("Message published to kafka topic {}. key/client {}", responsesTopic, clientID);
     }
 
     /**
@@ -146,7 +147,7 @@ public class WorkflowStatusMonitor implements Runnable {
         // Thread.sleep function is executed so that a consumed message is not sent
         // to Conductor before the server is started
         try {
-            Thread.sleep(10); // 10 millisecond thread sleep
+            Thread.sleep(workflowStatusPollingInterval);
         } catch (final InterruptedException e) {
             // Restores the interrupt by the InterruptedException so that caller can see that
             // interrupt has occurred.

@@ -8,6 +8,7 @@ import java.util.Map;
 
 public class ResponseContainer {
 
+    private final String key;
     private final String dateTime;
     private final Map<String, Object> request;
     private int status;
@@ -17,6 +18,7 @@ public class ResponseContainer {
     private boolean startedAWorkflow;
 
     public ResponseContainer(final RequestContainer request) {
+        this.key = request.getKey();
         this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
         this.request = request.getRequestData();
         this.status = 204;
@@ -26,18 +28,8 @@ public class ResponseContainer {
         this.startedAWorkflow = false;
     }
 
-    /**
-     * This constructor is used for returning a ResponseContainer object when an error occurred before the
-     * client request was sent to the service
-     */
-    public ResponseContainer() {
-        this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
-        this.request = null;
-        this.status = 204;
-        this.statusType = Response.Status.NO_CONTENT;
-        this.responseEntity = "";
-        this.responseErrorMessage = "";
-
+    public String getKey() {
+        return key;
     }
 
     /**
@@ -137,6 +129,7 @@ public class ResponseContainer {
      */
     public Map<String, Object> getResponseData() {
         final Map<String, Object> responseData = new HashMap<>();
+        responseData.put("key", key);
         responseData.put("dateTime", dateTime);
         responseData.put("request", (request == null) ? "" : request);
         responseData.put("status", status);
@@ -148,12 +141,14 @@ public class ResponseContainer {
 
     /**
      * Creates a to String object for printing the responseContainer object
+     *
      * @return String object of the class
      */
     @Override
     public String toString() {
         return "ResponseContainer{" +
-                "dateTime='" + dateTime + '\'' +
+                "key='" + key + '\'' +
+                ", dateTime='" + dateTime + '\'' +
                 ", request=" + request +
                 ", status=" + status +
                 ", statusType=" + statusType +
