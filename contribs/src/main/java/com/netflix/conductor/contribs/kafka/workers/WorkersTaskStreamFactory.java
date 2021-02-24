@@ -16,7 +16,6 @@ public class WorkersTaskStreamFactory {
 
     private static final String TASKS_TOPIC = "Task-Queue";
     private static final String UPDATE_TOPIC = "Update";
-    private static final String STATUS_TOPIC = "Status";
     private final ActiveWorkersMonitor activeWorkersMonitor;
     private final ExecutorService threadPool;
     private final KafkaTopicsManager kafkaTopicManager;
@@ -48,13 +47,13 @@ public class WorkersTaskStreamFactory {
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      */
     public ResponseContainer createWorkerTaskStream(final String worker, final ResponseContainer responseContainer) {
-        Map<String, Object> request = responseContainer.getRequest();
-        ArrayList<?> entity = (ArrayList<?>) request.get("entity");
-        TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
         Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
 
         // When the first instance of a service is registered, create and start the worker task stream
         if (!activeWorkersMonitor.isActive(worker)){
+            Map<String, Object> request = responseContainer.getRequest();
+            ArrayList<?> entity = (ArrayList<?>) request.get("entity");
+            TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
             activeWorkersMonitor.addActiveWorker(worker, taskDef.getName());  // Adds worker to active workers collection
             startWorkerTaskStream(worker, taskDef.getName(), topics);
         }
@@ -96,7 +95,6 @@ public class WorkersTaskStreamFactory {
         Map<String, String> topics = new HashMap<>();
         topics.put("taskTopic", worker + "-" + TASKS_TOPIC);
         topics.put("updateTopic", worker + "-" + UPDATE_TOPIC);
-        topics.put("statusTopic", worker + "-" + STATUS_TOPIC);
         return topics;
     }
 

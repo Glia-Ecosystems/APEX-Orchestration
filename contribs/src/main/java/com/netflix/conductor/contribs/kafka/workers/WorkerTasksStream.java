@@ -7,7 +7,6 @@ import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.RequestContainerSerde;
-import com.netflix.conductor.contribs.kafka.streamsutil.ResponseContainerSerde;
 import com.netflix.conductor.core.execution.ApplicationException;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -19,7 +18,6 @@ import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.Predicate;
-import org.apache.kafka.streams.kstream.Produced;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,12 +35,10 @@ public class WorkerTasksStream implements Runnable {
     private final ActiveWorkersMonitor activeWorkersMonitor;
     // Create custom Serde objects for processing records
     private final RequestContainerSerde requestContainerSerde;
-    private final ResponseContainerSerde responseContainerSerde;
     private final String worker;
     private final String taskName;
     private final String tasksTopic;
     private final String updateTopic;
-    private final String statusTopic;
     private final int pollBatchSize;
     private final int taskPollingInterval;
     private final Gson gson;
@@ -58,12 +54,10 @@ public class WorkerTasksStream implements Runnable {
         this.taskName = taskName;
         this.tasksTopic = topics.get("taskTopic");
         this.updateTopic = topics.get("updateTopic");
-        this.statusTopic = topics.get("statusTopic");
         this.responseStreamProperties = responseStreamProperties;
         this.activeWorkersMonitor = activeWorkersMonitor;
         this.gson = new Gson();
         this.requestContainerSerde = new RequestContainerSerde();
-        this.responseContainerSerde = new ResponseContainerSerde();
         this.producer = new KafkaProducer<>(producerProperties);
         this.pollBatchSize = pollBatchSize;
         this.taskPollingInterval = taskPollingInterval;
@@ -72,7 +66,7 @@ public class WorkerTasksStream implements Runnable {
     /**
      * Creates a topology for processing tasks between workers and Conductor
      *
-     * It is assumed that the topics provided is already configured the kafka cluster.
+     * It is assumed that the topics provided is already configured in the kafka cluster.
      *
      * @return A kafka task streams topology for processing tasks
      */
@@ -97,11 +91,18 @@ public class WorkerTasksStream implements Runnable {
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
         KStream<String, ResponseContainer> processedURIError = executeDept[1].
                     mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
-        KStream<String, ResponseContainer> processedTask = executeDept[2].
-                mapValues(resourceHandler::processRequest);
-        processedTask.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedValueError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedURIError.to(statusTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        KStream<String, ResponseContainer> processedTask = executeDept[2].mapValues(resourceHandler::processRequest);
+        // Log errors, if any occurs
+        processedValueError.foreach((k, v) -> logger.error("Value error received from {} service while attempting to" +
+                        " update or acknowledge task.Status: {}. Error: {}. Error Message: {}",
+                v.getKey(), v.getStatus(), v.getResponseEntity(), v.getResponseErrorMessage()));
+        processedURIError.foreach((k, v) -> logger.error("URI error received from {} service while attempting to" +
+                        " update or acknowledge task.Status: {}. Error: {}. Error Message: {}",
+                v.getKey(), v.getStatus(), v.getResponseEntity(), v.getResponseErrorMessage()));
+        processedTask.filter((k, v) -> v.getStatus() != 200)
+                .foreach((k, v) -> logger.error("Error occurred processing update or acknowledge task request from {} service." +
+                        "Status: {}. Error: {}. Error Message: {}", v.getKey(), v.getStatus(), v.getResponseEntity(),
+                        v.getResponseErrorMessage()));
         return builder.build();
     }
 
