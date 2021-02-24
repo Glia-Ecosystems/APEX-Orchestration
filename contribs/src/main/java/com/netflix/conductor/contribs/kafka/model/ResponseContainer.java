@@ -28,6 +28,11 @@ public class ResponseContainer {
         this.startedAWorkflow = false;
     }
 
+    /**
+     * Get the key provided with the request
+     *
+     * @return Key of request
+     */
     public String getKey() {
         return key;
     }
@@ -131,7 +136,6 @@ public class ResponseContainer {
         final Map<String, Object> responseData = new HashMap<>();
         responseData.put("key", key);
         responseData.put("dateTime", dateTime);
-        responseData.put("request", (request == null) ? "" : request);
         responseData.put("status", status);
         responseData.put("statusType", statusType);
         responseData.put("responseEntity", (responseEntity == null) ? "" : responseEntity);
@@ -149,12 +153,10 @@ public class ResponseContainer {
         return "ResponseContainer{" +
                 "key='" + key + '\'' +
                 ", dateTime='" + dateTime + '\'' +
-                ", request=" + request +
                 ", status=" + status +
                 ", statusType=" + statusType +
                 ", responseErrorMessage='" + responseErrorMessage + '\'' +
                 ", responseEntity=" + responseEntity +
-                ", startedAWorkflow=" + startedAWorkflow +
                 '}';
     }
 }
