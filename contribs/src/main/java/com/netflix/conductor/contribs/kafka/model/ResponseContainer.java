@@ -29,8 +29,9 @@ public class ResponseContainer {
     }
 
     /**
+     * Get the key provided with the request
      *
-     * @return
+     * @return Key of request
      */
     public String getKey() {
         return key;

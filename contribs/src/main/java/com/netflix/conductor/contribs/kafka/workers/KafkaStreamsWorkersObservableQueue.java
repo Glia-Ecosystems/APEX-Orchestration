@@ -54,7 +54,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.responseContainerSerde = new ResponseContainerSerde();
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
-        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register");
+        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register-" + UUID.randomUUID().toString().substring(0, 7));
         this.heartbeatCoordinator = new HeartbeatCoordinator(configuration, kafkaPropertiesProvider, kafkaTopicsManager);
         this.activeWorkersMonitor = new ActiveWorkersMonitor(configuration, kafkaTopicsManager, resourceHandler, kafkaPropertiesProvider);
         this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider, activeWorkersMonitor,
