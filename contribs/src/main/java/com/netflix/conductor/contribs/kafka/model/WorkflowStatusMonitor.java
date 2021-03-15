@@ -11,7 +11,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -75,7 +75,7 @@ public class WorkflowStatusMonitor implements Runnable {
             ResponseContainer responseContainer = requestWorkflowStatus();
             Map<String, Object> workflow = objectToMap(responseContainer.getResponseEntity());
             Object workflowStatus = workflow.get("status");
-            clientUpdateVerifier(responseContainer, workflowStatus);
+            clientUpdateVerifier(responseContainer, workflow, workflowStatus);
             completed = (workflowStatus == "COMPLETED") || (workflowStatus == "TERMINATED");
             pollingInterval();
         }
@@ -87,14 +87,17 @@ public class WorkflowStatusMonitor implements Runnable {
      * @param responseContainer Response object for sending all needed information about the response from the Conductor API
      * @param workflowStatus Status of the workflow
      */
-    private void clientUpdateVerifier(final ResponseContainer responseContainer, final Object workflowStatus) {
+    private void clientUpdateVerifier(final ResponseContainer responseContainer, final Map<String, Object> workflow,
+                                      final Object workflowStatus) {
         if (!workflowStatus.equals(currentStatus)) {
             currentStatus = workflowStatus;
+            // Get and return only relevant information from workflow for client
+            responseContainer.setResponseEntity(getWorkflowStatus(workflow));
             updateClientOfWorkFlowStatus(responseContainer);
             // Retry the last task in workflow for the client if a workflow status "FAILED" is received
-            if (workflowStatus == "FAILED") {
-                retryLastTask();
-            }
+            // if (workflowStatus == "FAILED") {
+            //    retryLastTask();
+            //}
         }
     }
 
@@ -105,6 +108,26 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
         publishStatusMessage(gson.toJson(responseContainer.getResponseData()));
+    }
+
+    /**
+     * Filter the current workflow to retrieve and return only the relevant information for
+     * the client
+     * @param workflow Current workflow initialise by the client
+     * @return The relevant workflow status information for the client
+     */
+    private Map<String, Object> getWorkflowStatus(Map<String, Object> workflow) {
+        final Map<String, Object> workflowStatus = new HashMap<>();
+        workflowStatus.put("workflowId", workflow.get("workflowId"));
+        workflowStatus.put("workflowName", workflow.get("workflowName"));
+        workflowStatus.put("tasks", workflow.get("tasks"));
+        workflowStatus.put("status", workflow.get("status"));
+        workflowStatus.put("createTime", workflow.get("createTime"));
+        workflowStatus.put("updateTime", workflow.get("updateTime"));
+        workflowStatus.put("startTime", workflow.get("startTime"));
+        workflowStatus.put("endTime", workflow.get("endTime"));
+        workflowStatus.put("output", workflow.get("output"));
+        return workflowStatus;
     }
 
     /**
