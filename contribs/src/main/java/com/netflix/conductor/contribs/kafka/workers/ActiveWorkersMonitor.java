@@ -70,7 +70,9 @@ public class ActiveWorkersMonitor {
      * @param worker The service name
      */
     public void removeInActiveWorker(final String worker){
-        unregisterWorker(workersStatus.get(worker).getTaskName());
+        // Below is commented out until it is determined how we will like to handle
+        // the un-registration of services task definition
+        // unregisterWorker(workersStatus.get(worker).getTaskName());
         activeWorkers.remove(worker);
         workersStatus.remove(worker);
         logger.debug("Removed inActive {} worker from collection of Active Workers", worker);
@@ -97,7 +99,6 @@ public class ActiveWorkersMonitor {
      *
      * @return List of registered task definitions
      */
-    @SuppressWarnings("unchecked")
     public List<TaskDef> getExistingTaskDefinitions() {
         ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer("", "/metadata/taskdefs", "GET", ""));
         if (responseContainer.getStatus() == 200) {
@@ -201,7 +202,6 @@ public class ActiveWorkersMonitor {
      *
      * @return A kafka task streams topology for listening to heartbeats from workers
      */
-    @SuppressWarnings("unchecked")
     private Topology buildStatusListenerTopology(){
         logger.info("Building Kafka Streams Topology for listening to workers heartbeat");
         // Build kafka streams topology
