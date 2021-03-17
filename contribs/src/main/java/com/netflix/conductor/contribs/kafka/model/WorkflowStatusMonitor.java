@@ -94,7 +94,8 @@ public class WorkflowStatusMonitor implements Runnable {
             // Get and return only relevant information from workflow for client
             responseContainer.setResponseEntity(getWorkflowStatus(workflow));
             updateClientOfWorkFlowStatus(responseContainer);
-            // Retry the last task in workflow for the client if a workflow status "FAILED" is received
+            // TODO Implement an efficient retry when tasks fail
+            //  Retry the last task in workflow for the client if a workflow status "FAILED" is received
             // if (workflowStatus == "FAILED") {
             //    retryLastTask();
             //}
@@ -111,23 +112,48 @@ public class WorkflowStatusMonitor implements Runnable {
     }
 
     /**
-     * Filter the current workflow to retrieve and return only the relevant information for
+     * Filter the current running workflow to retrieve and return only the relevant information for
      * the client
+     * This function is used to reduce the payload of the workflow/tasks status returned
+     * to the client
      * @param workflow Current workflow initialise by the client
-     * @return The relevant workflow status information for the client
+     * @return The current running workflow relevant status information for the client
      */
+    @SuppressWarnings("unchecked")
     private Map<String, Object> getWorkflowStatus(Map<String, Object> workflow) {
         final Map<String, Object> workflowStatus = new HashMap<>();
         workflowStatus.put("workflowId", workflow.get("workflowId"));
         workflowStatus.put("workflowName", workflow.get("workflowName"));
-        workflowStatus.put("tasks", workflow.get("tasks"));
         workflowStatus.put("status", workflow.get("status"));
+        workflowStatus.put("lastRetriedTime", workflow.get("lastRetriedTime"));
+        workflowStatus.put("failedReferenceTaskNames", workflow.get("failedReferenceTaskNames"));
+        workflowStatus.put("workflowVersion", workflow.get("workflowVersion"));
         workflowStatus.put("createTime", workflow.get("createTime"));
         workflowStatus.put("updateTime", workflow.get("updateTime"));
         workflowStatus.put("startTime", workflow.get("startTime"));
         workflowStatus.put("endTime", workflow.get("endTime"));
         workflowStatus.put("output", workflow.get("output"));
+        workflowStatus.put("tasks", getTasksStatus((List<Object>) workflow.get("tasks")));
         return workflowStatus;
+    }
+
+    /**
+     * Filter the tasks in the current running workflow to retrieve and return only name and status of tasks in the
+     * workflow
+     *
+     * @param workflowTasks Current tasks in running workflow initialise by the client
+     * @return The name of tasks and their respective current status in the execution of the workflow
+     */
+    private List<Object> getTasksStatus(List<Object> workflowTasks){
+        List<Object> tasks =  new ArrayList<>();
+        for (Object taskObject: workflowTasks){
+            Map<String, Object> taskStatus = new HashMap<>();
+            Map<String, Object> task = objectToMap(taskObject);
+            taskStatus.put("taskType", task.get("taskType"));
+            taskStatus.put("status", task.get("status"));
+            tasks.add(taskStatus);
+        }
+        return tasks;
     }
 
     /**
