@@ -70,8 +70,8 @@ public class ActiveWorkersMonitor {
      * @param worker The service name
      */
     public void removeInActiveWorker(final String worker){
-        // Below is commented out until it is determined how we will like to handle
-        // the un-registration of services task definition
+        // TODO Below is commented out until it is determined how we will like to handle
+        //  the un-registration of services task definition
         // unregisterWorker(workersStatus.get(worker).getTaskName());
         activeWorkers.remove(worker);
         workersStatus.remove(worker);
