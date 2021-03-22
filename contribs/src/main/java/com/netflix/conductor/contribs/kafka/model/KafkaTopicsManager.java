@@ -117,10 +117,11 @@ public class KafkaTopicsManager {
      * @return List of topics that do not exist
      */
     private List<String> topicExists(final List<String> topics) {
-        List<String> topicsNotExist = new ArrayList<>();
         try {
             final Set<String> existingTopics = adminClient.listTopics().names().get();
             if (!existingTopics.isEmpty()) {
+                // Loop through topics requested to be created and check if any already exist
+                List<String> topicsNotExist = new ArrayList<>();
                 for (String topicName : topics) {
                     if (!existingTopics.contains(topicName)) {
                         topicsNotExist.add(topicName);
@@ -128,8 +129,12 @@ public class KafkaTopicsManager {
                         logger.info("Topic {} already exists, no need to create it", topicName);
                     }
                 }
+                // Return only topics that do not exist already
+                return topicsNotExist;
+            } else {
+                // No topics exist on the broker.
+                return topics;
             }
-            return topicsNotExist;
         } catch (final Exception e) {
             throw new ProviderException("KafkaTopicManager.topicExists()." + topics + " " + e.toString(), e);
         }
