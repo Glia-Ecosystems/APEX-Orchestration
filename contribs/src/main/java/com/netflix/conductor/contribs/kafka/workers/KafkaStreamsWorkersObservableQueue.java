@@ -11,6 +11,7 @@ import com.netflix.conductor.contribs.kafka.streamsutil.*;
 import com.netflix.conductor.core.config.Configuration;
 import com.netflix.conductor.core.events.queue.Message;
 import com.netflix.conductor.core.events.queue.ObservableQueue;
+import com.netflix.conductor.core.utils.IDGenerator;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -54,7 +55,7 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.responseContainerSerde = new ResponseContainerSerde();
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
-        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register-" + UUID.randomUUID().toString().substring(0, 7));
+        this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register-" + IDGenerator.generate().substring(0, 7));
         this.heartbeatCoordinator = new HeartbeatCoordinator(configuration, kafkaPropertiesProvider, kafkaTopicsManager);
         this.activeWorkersMonitor = new ActiveWorkersMonitor(configuration, kafkaTopicsManager, resourceHandler, kafkaPropertiesProvider);
         this.workersTaskStreamFactory = new WorkersTaskStreamFactory(configuration, kafkaPropertiesProvider, activeWorkersMonitor,

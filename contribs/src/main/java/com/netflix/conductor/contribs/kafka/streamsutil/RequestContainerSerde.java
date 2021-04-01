@@ -1,10 +1,8 @@
 package com.netflix.conductor.contribs.kafka.streamsutil;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.netflix.conductor.contribs.kafka.model.RequestContainer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
@@ -25,7 +23,7 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
     private String errorMessage;
 
     public RequestContainerSerde () {
-        this.objectMapper = JsonMapper.builder().enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS).build();
+        this.objectMapper = new ObjectMapper();
     }
 
     /**

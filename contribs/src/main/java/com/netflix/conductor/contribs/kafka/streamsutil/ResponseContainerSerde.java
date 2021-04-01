@@ -1,7 +1,6 @@
 package com.netflix.conductor.contribs.kafka.streamsutil;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
@@ -15,9 +14,7 @@ import java.util.Map;
 public class ResponseContainerSerde implements Serde<ResponseContainer> {
 
     private static final Logger logger = LoggerFactory.getLogger(ResponseContainerSerde.class);
-    // The method below allow a Gson object to be created for serialization purposes with the
-    // capability to accept NaN - Non numeric numbers
-    private final Gson gson = new GsonBuilder().serializeSpecialFloatingPointValues().create();
+    private final Gson gson = new Gson();
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {

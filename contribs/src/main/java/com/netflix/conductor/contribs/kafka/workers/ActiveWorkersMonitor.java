@@ -8,6 +8,7 @@ import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.WorkerHeartbeatSerde;
 import com.netflix.conductor.core.config.Configuration;
+import com.netflix.conductor.core.utils.IDGenerator;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -42,7 +43,7 @@ public class ActiveWorkersMonitor {
         this.workersHeartbeatTopic = getWorkersHeartbeatTopic(configuration, kafkaTopicsManager);
         // Adding unique ID to kafka stream, status listener application ID, to allow for each instance of Conductor
         // to receive each status (heartbeat) sent to the respective topic
-        this.statusListenerProperties = kafkaPropertiesProvider.getStreamsProperties("status-listener-" + UUID.randomUUID().toString().substring(0, 7));
+        this.statusListenerProperties = kafkaPropertiesProvider.getStreamsProperties("status-listener-" + IDGenerator.generate().substring(0, 7));
         this.workerInactiveTimer = configuration.getLongProperty("worker.inactive.ms", 120000);
         startWorkersStatusListenerStream();
     }
