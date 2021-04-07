@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
-import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.ResponsePayload;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.core.config.Configuration;
 
@@ -44,22 +44,22 @@ public class WorkersTaskStreamFactory {
      * Creates a worker task stream object/thread
      *
      * @param  worker The name of the worker
-     * @param responseContainer Response object for sending all needed information about the response from the Conductor API
+     * @param responsePayload Response object for sending all needed information about the response from the Conductor API
      */
-    public ResponseContainer createWorkerTaskStream(final String worker, final ResponseContainer responseContainer) {
+    public ResponsePayload createWorkerTaskStream(final String worker, final ResponsePayload responsePayload) {
         Map<String, String> topics = createTopics(worker);  // Create topics for service to communicate with Conductor
 
         // When the first instance of a service is registered, create and start the worker task stream
         if (!activeWorkersMonitor.isActive(worker)){
-            Map<String, Object> request = responseContainer.getRequest();
+            Map<String, Object> request = responsePayload.getRequest();
             ArrayList<?> entity = (ArrayList<?>) request.get("entity");
             TaskDef taskDef = objectMapper.convertValue(entity.get(0), TaskDef.class);
             activeWorkersMonitor.addActiveWorker(worker, taskDef.getName());  // Adds worker to active workers collection
             startWorkerTaskStream(worker, taskDef.getName(), topics);
         }
         // Return topics to service
-        responseContainer.setResponseEntity(topics);
-        return responseContainer;
+        responsePayload.setResponseEntity(topics);
+        return responsePayload;
     }
 
     /**

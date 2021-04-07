@@ -1,7 +1,7 @@
 package com.netflix.conductor.contribs.kafka.streamsutil;
 
 import com.google.gson.Gson;
-import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.ResponsePayload;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
@@ -11,9 +11,9 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-public class ResponseContainerSerde implements Serde<ResponseContainer> {
+public class ResponsePayloadSerde implements Serde<ResponsePayload> {
 
-    private static final Logger logger = LoggerFactory.getLogger(ResponseContainerSerde.class);
+    private static final Logger logger = LoggerFactory.getLogger(ResponsePayloadSerde.class);
     private final Gson gson = new Gson();
 
     @Override
@@ -33,16 +33,16 @@ public class ResponseContainerSerde implements Serde<ResponseContainer> {
      * @return Serialized RequestContainer object
      */
     @Override
-    public Serializer<ResponseContainer> serializer() {
-        return new Serializer<ResponseContainer>() {
+    public Serializer<ResponsePayload> serializer() {
+        return new Serializer<ResponsePayload>() {
             @Override
             public void configure(Map<String, ?> configs, boolean isKey) {
                 // This method is left empty until needed.
             }
 
             @Override
-            public byte[] serialize(String topic, ResponseContainer responseContainer) {
-                return gson.toJson(responseContainer.getResponseData()).getBytes(StandardCharsets.UTF_8);
+            public byte[] serialize(String topic, ResponsePayload responsePayload) {
+                return gson.toJson(responsePayload.getResponseData()).getBytes(StandardCharsets.UTF_8);
             }
 
             @Override
@@ -53,7 +53,7 @@ public class ResponseContainerSerde implements Serde<ResponseContainer> {
     }
 
     @Override
-    public Deserializer<ResponseContainer> deserializer() {
+    public Deserializer<ResponsePayload> deserializer() {
         return null;
     }
 }

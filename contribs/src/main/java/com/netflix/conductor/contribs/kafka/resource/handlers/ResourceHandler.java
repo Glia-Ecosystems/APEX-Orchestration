@@ -4,13 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.google.inject.Inject;
 import com.google.inject.ProvisionException;
-import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.ResponsePayload;
 import com.netflix.conductor.contribs.kafka.resource.builder.Resource;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceBuilder;
 import com.google.inject.Injector;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.MethodParameter;
-import com.netflix.conductor.contribs.kafka.model.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,9 +76,9 @@ public class ResourceHandler {
      * @param request Contains all the needed information for processing the request
      * @return Response from resource
      */
-    public ResponseContainer processRequest(RequestContainer request) {
+    public ResponsePayload processRequest(RequestPayload request) {
         // Create a response container
-        final ResponseContainer response = new ResponseContainer(request);
+        final ResponsePayload response = new ResponsePayload(request);
 
         // Get the requested resource from the resource map
         final Resource requestedResource = getRequestedResource(request);
@@ -112,7 +112,7 @@ public class ResourceHandler {
      * @param request Contains all the needed information for processing the request
      * @return Resource object of resource class. If not found, null is returned
      */
-    private Resource getRequestedResource(final RequestContainer request) {
+    private Resource getRequestedResource(final RequestPayload request) {
         for (final Map.Entry<String, Resource> entry : resourceMap.entrySet()) {
             final Pattern p = Pattern.compile(entry.getKey());
             final Matcher m = p.matcher(request.getResourceURI());
@@ -126,14 +126,14 @@ public class ResourceHandler {
     /**
      * Searches the resource method map for the requested service
      *
-     * @param requestContainer Contains all the needed information for processing the request
+     * @param requestPayload Contains all the needed information for processing the request
      * @param resource         Resource object of the requested resource class
      * @param methodURI        URI of the requested service
      * @return ResourceMethod object of the requested method. If not found, null is returned
      */
-    private ResourceMethod getRequestedService(final RequestContainer requestContainer, final Resource resource,
+    private ResourceMethod getRequestedService(final RequestPayload requestPayload, final Resource resource,
                                                final String methodURI) {
-        for (final ResourceMethod resourceMethod : resource.getMethods().get(requestContainer.getHttpMethod())) {
+        for (final ResourceMethod resourceMethod : resource.getMethods().get(requestPayload.getHttpMethod())) {
             final Pattern p = Pattern.compile(resourceMethod.getUriPattern());
             final Matcher m = p.matcher(methodURI);
             if (m.matches()) {
@@ -151,8 +151,8 @@ public class ResourceHandler {
      * @param requestedMethod  ResourceMethod object of the requested method
      * @return Response from resource
      */
-    private ResponseContainer executeRequest(final RequestContainer request, final ResponseContainer response,
-                                             final Resource requestedResource, final ResourceMethod requestedMethod) {
+    private ResponsePayload executeRequest(final RequestPayload request, final ResponsePayload response,
+                                           final Resource requestedResource, final ResourceMethod requestedMethod) {
         Object serviceResponse = null;
         try {
             final Object resourceInstance = getResourceInstance(requestedResource.getResourceClass());
@@ -176,38 +176,38 @@ public class ResourceHandler {
     /**
      * Update response container with response from the Conductor API
      *
-     * @param responseContainer Response object for sending all needed information about the response from the Conductor API
+     * @param responsePayload Response object for sending all needed information about the response from the Conductor API
      * @param response          Response from the Conductor API
      * @return Contains all the needed information about the response from the Conductor API
      */
-    private ResponseContainer processResponse(final ResponseContainer responseContainer, final Object response,
-                                              final boolean invocationException) {
-        if ("".equals(responseContainer.getResponseErrorMessage())) {
+    private ResponsePayload processResponse(final ResponsePayload responsePayload, final Object response,
+                                            final boolean invocationException) {
+        if ("".equals(responsePayload.getResponseErrorMessage())) {
             // If no error message respond that everything went okay with process request
-            responseContainer.setStatus(200);
-            responseContainer.setStatusType(Status.OK);
+            responsePayload.setStatus(200);
+            responsePayload.setStatusType(Status.OK);
         } else if (invocationException) {
             // If an Invocation exception occurred, set internal server error status
-            responseContainer.setStatus(400);
-            responseContainer.setStatusType(Status.BAD_REQUEST);
+            responsePayload.setStatus(400);
+            responsePayload.setStatusType(Status.BAD_REQUEST);
         } else {
             // If any other exception occurred, set internal server error status
-            responseContainer.setStatus(500);
-            responseContainer.setStatusType(Status.INTERNAL_SERVER_ERROR);
+            responsePayload.setStatus(500);
+            responsePayload.setStatusType(Status.INTERNAL_SERVER_ERROR);
         }
-        responseContainer.setResponseEntity(response);
-        return responseContainer;
+        responsePayload.setResponseEntity(response);
+        return responsePayload;
     }
 
     /**
      * Filter through the parameters of the requested method and gets the necessary arguments for the method
      *
-     * @param requestContainer  Response object for sending all needed information about the response from the Conductor API
+     * @param requestPayload  Response object for sending all needed information about the response from the Conductor API
      * @param resourceMethod    ResourceMethod object of the requested method
      * @param requestedResource Resource object of the requested resource class
      * @return List of the arguments for the requested method
      */
-    private Object[] getMethodArguments(final RequestContainer requestContainer, final ResourceMethod resourceMethod,
+    private Object[] getMethodArguments(final RequestPayload requestPayload, final ResourceMethod resourceMethod,
                                         final Resource requestedResource) throws IOException, InvocationTargetException, IllegalAccessException {
         final List<MethodParameter> parameters = resourceMethod.getParameters();
         final Object[] arguments = new Object[parameters.size()];
@@ -215,14 +215,14 @@ public class ResourceHandler {
             final String parameterAnnotationType = parameters.get(i).getParameterAnnotationType().name();
             // Get arguments for path param annotated parameters
             if (parameterAnnotationType.equals("PATH")) {
-                arguments[i] = getPathParamValue(requestContainer.getResourceURI(), resourceMethod.getUri().value(),
+                arguments[i] = getPathParamValue(requestPayload.getResourceURI(), resourceMethod.getUri().value(),
                         parameters.get(i).getParameterName(), requestedResource.getPathURI().value());
                 // Get arguments for query param annotated parameters
             } else if (parameterAnnotationType.equals("QUERY")) {
-                arguments[i] = getQueryParamValue(requestContainer.getResourceURI(), parameters.get(i));
+                arguments[i] = getQueryParamValue(requestPayload.getResourceURI(), parameters.get(i));
             } else {
                 // Get arguments for entity parameters
-                arguments[i] = getEntityParamValue(parameters.get(i).getParameterType(), requestContainer.getEntity());
+                arguments[i] = getEntityParamValue(parameters.get(i).getParameterType(), requestPayload.getEntity());
             }
         }
         return arguments;

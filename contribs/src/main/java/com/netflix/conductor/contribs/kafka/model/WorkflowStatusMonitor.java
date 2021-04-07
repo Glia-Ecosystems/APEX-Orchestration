@@ -50,11 +50,11 @@ public class WorkflowStatusMonitor implements Runnable {
     /**
      * Makes a request to conductor to get the status of the workflow
      *
-     * @return Response from the resource contained in a response container object
+     * @return Response from the resource contained in a response payload object
      */
-    private ResponseContainer requestWorkflowStatus(){
+    private ResponsePayload requestWorkflowStatus(){
         String path = "/workflow/" + workflowID;
-        return resourceHandler.processRequest(new RequestContainer(clientID, path, "GET", ""));
+        return resourceHandler.processRequest(new RequestPayload(clientID, path, "GET", ""));
     }
 
     /**
@@ -63,7 +63,7 @@ public class WorkflowStatusMonitor implements Runnable {
      */
     private void retryLastTask(){
         String path = "/workflow/" + workflowID + "/retry";
-        resourceHandler.processRequest(new RequestContainer(clientID, path, "POST", ""));
+        resourceHandler.processRequest(new RequestPayload(clientID, path, "POST", ""));
     }
 
     /**
@@ -72,10 +72,10 @@ public class WorkflowStatusMonitor implements Runnable {
     private void monitor() {
         boolean completed = false;
         while (!completed) {
-            ResponseContainer responseContainer = requestWorkflowStatus();
-            Map<String, Object> workflow = objectToMap(responseContainer.getResponseEntity());
+            ResponsePayload responsePayload = requestWorkflowStatus();
+            Map<String, Object> workflow = objectToMap(responsePayload.getResponseEntity());
             Object workflowStatus = workflow.get("status");
-            clientUpdateVerifier(responseContainer, workflow, workflowStatus);
+            clientUpdateVerifier(responsePayload, workflow, workflowStatus);
             completed = (workflowStatus == "COMPLETED") || (workflowStatus == "TERMINATED");
             pollingInterval();
         }
@@ -84,16 +84,16 @@ public class WorkflowStatusMonitor implements Runnable {
     /**
      * Verify and update the client when the status of a workflow has changed
      *
-     * @param responseContainer Response object for sending all needed information about the response from the Conductor API
+     * @param responsePayload Response object for sending all needed information about the response from the Conductor API
      * @param workflowStatus Status of the workflow
      */
-    private void clientUpdateVerifier(final ResponseContainer responseContainer, final Map<String, Object> workflow,
+    private void clientUpdateVerifier(final ResponsePayload responsePayload, final Map<String, Object> workflow,
                                       final Object workflowStatus) {
         if (!workflowStatus.equals(currentStatus)) {
             currentStatus = workflowStatus;
             // Get and return only relevant information from workflow for client
-            responseContainer.setResponseEntity(getWorkflowStatus(workflow));
-            updateClientOfWorkFlowStatus(responseContainer);
+            responsePayload.setResponseEntity(getWorkflowStatus(workflow));
+            updateClientOfWorkFlowStatus(responsePayload);
             // TODO Implement an efficient retry when tasks fail
             //  Retry the last task in workflow for the client if a workflow status "FAILED" is received
             // if (workflowStatus == "FAILED") {
@@ -105,10 +105,10 @@ public class WorkflowStatusMonitor implements Runnable {
     /**
      * Send the status update of the workflow to the client via kafka
      *
-     * @param responseContainer Response object for sending all needed information about the response from the Conductor API
+     * @param responsePayload Response object for sending all needed information about the response from the Conductor API
      */
-    private void updateClientOfWorkFlowStatus(final ResponseContainer responseContainer) {
-        publishStatusMessage(gson.toJson(responseContainer.getResponseData()));
+    private void updateClientOfWorkFlowStatus(final ResponsePayload responsePayload) {
+        publishStatusMessage(gson.toJson(responsePayload.getResponseData()));
     }
 
     /**

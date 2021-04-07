@@ -4,9 +4,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Container object for the client request
+ * Payload object for the client request
  */
-public class RequestContainer {
+public class RequestPayload {
 
     private final String key;
     private final String resourceURI;
@@ -16,8 +16,8 @@ public class RequestContainer {
     private boolean deserializationErrorOccurred;
     private String deserializationError;
 
-    public RequestContainer(final String key, final String resourceURI, final String httpMethod,
-                            final Object entity) {
+    public RequestPayload(final String key, final String resourceURI, final String httpMethod,
+                          final Object entity) {
         this.key = key;
         this.resourceURI = resourceURI;
         this.httpMethod = httpMethod;
@@ -117,7 +117,7 @@ public class RequestContainer {
      */
     @Override
     public String toString() {
-        return "RequestContainer{" +
+        return "RequestPayload{" +
                 "key='" + key + '\'' +
                 ", resourceURI='" + resourceURI + '\'' +
                 ", httpMethod='" + httpMethod + '\'' +

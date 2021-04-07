@@ -3,8 +3,8 @@ package com.netflix.conductor.contribs.kafka.workers;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
-import com.netflix.conductor.contribs.kafka.model.RequestContainer;
-import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestPayload;
+import com.netflix.conductor.contribs.kafka.model.ResponsePayload;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.WorkerHeartbeatSerde;
 import com.netflix.conductor.core.config.Configuration;
@@ -86,12 +86,12 @@ public class ActiveWorkersMonitor {
      */
     private void unregisterWorker(final String taskName){
         String path = "/metadata/taskdefs/" + taskName;
-        ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer("", path, "DELETE", ""));
-        if (responseContainer.getStatus() == 200){
+        ResponsePayload responsePayload = resourceHandler.processRequest(new RequestPayload("", path, "DELETE", ""));
+        if (responsePayload.getStatus() == 200){
             logger.debug("Unregistered Task Definition: {}", taskName);
         } else {
             logger.debug("Error occurred unregistering task definition for {}. Error: {}",
-                    taskName, responseContainer.getResponseErrorMessage());
+                    taskName, responsePayload.getResponseErrorMessage());
         }
     }
 
@@ -101,12 +101,12 @@ public class ActiveWorkersMonitor {
      * @return List of registered task definitions
      */
     public List<TaskDef> getExistingTaskDefinitions() {
-        ResponseContainer responseContainer = resourceHandler.processRequest(new RequestContainer("", "/metadata/taskdefs", "GET", ""));
-        if (responseContainer.getStatus() == 200) {
-            return (List<TaskDef>) responseContainer.getResponseEntity();
+        ResponsePayload responsePayload = resourceHandler.processRequest(new RequestPayload("", "/metadata/taskdefs", "GET", ""));
+        if (responsePayload.getStatus() == 200) {
+            return (List<TaskDef>) responsePayload.getResponseEntity();
         } else {
             logger.debug("Error occurred getting registered task definitions. Error: {}",
-                    responseContainer.getResponseErrorMessage());
+                    responsePayload.getResponseErrorMessage());
             return new ArrayList<>();
         }
     }

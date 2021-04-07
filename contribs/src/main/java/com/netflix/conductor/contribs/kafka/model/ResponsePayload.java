@@ -6,7 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ResponseContainer {
+public class ResponsePayload {
 
     private final String key;
     private final String dateTime;
@@ -17,7 +17,7 @@ public class ResponseContainer {
     private Object responseEntity;
     private boolean startedAWorkflow;
 
-    public ResponseContainer(final RequestContainer request) {
+    public ResponsePayload(final RequestPayload request) {
         this.key = request.getKey();
         this.dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("E, MMM dd yyyy HH:mm:ss"));
         this.request = request.getRequestData();
@@ -38,7 +38,7 @@ public class ResponseContainer {
     }
 
     /**
-     * Set the response from the resource method to the conatiner
+     * Set the response from the resource method to the payload
      *
      * @param responseEntity The response from the service
      */
@@ -150,7 +150,7 @@ public class ResponseContainer {
      */
     @Override
     public String toString() {
-        return "ResponseContainer{" +
+        return "ResponsePayload{" +
                 "key='" + key + '\'' +
                 ", dateTime='" + dateTime + '\'' +
                 ", status=" + status +

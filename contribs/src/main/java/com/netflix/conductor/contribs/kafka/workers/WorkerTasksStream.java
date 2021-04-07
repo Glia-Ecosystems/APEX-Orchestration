@@ -2,11 +2,11 @@ package com.netflix.conductor.contribs.kafka.workers;
 
 import com.google.gson.Gson;
 import com.netflix.conductor.common.metadata.tasks.Task;
-import com.netflix.conductor.contribs.kafka.model.RequestContainer;
-import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestPayload;
+import com.netflix.conductor.contribs.kafka.model.ResponsePayload;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.KafkaStreamsDeserializationExceptionHandler;
-import com.netflix.conductor.contribs.kafka.streamsutil.RequestContainerSerde;
+import com.netflix.conductor.contribs.kafka.streamsutil.RequestPayloadSerde;
 import com.netflix.conductor.core.execution.ApplicationException;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -34,7 +34,7 @@ public class WorkerTasksStream implements Runnable {
     private final ResourceHandler resourceHandler;
     private final ActiveWorkersMonitor activeWorkersMonitor;
     // Create custom Serde objects for processing records
-    private final RequestContainerSerde requestContainerSerde;
+    private final RequestPayloadSerde requestPayloadSerde;
     private final String worker;
     private final String taskName;
     private final String tasksTopic;
@@ -57,7 +57,7 @@ public class WorkerTasksStream implements Runnable {
         this.responseStreamProperties = responseStreamProperties;
         this.activeWorkersMonitor = activeWorkersMonitor;
         this.gson = new Gson();
-        this.requestContainerSerde = new RequestContainerSerde();
+        this.requestPayloadSerde = new RequestPayloadSerde();
         this.producer = new KafkaProducer<>(producerProperties);
         this.pollBatchSize = pollBatchSize;
         this.taskPollingInterval = taskPollingInterval;
@@ -75,23 +75,23 @@ public class WorkerTasksStream implements Runnable {
         logger.info("Building Kafka Update Task Stream Topology for {}", worker);
         // Build kafka streams topology
         StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, RequestContainer> taskStream = builder.stream(updateTopic, Consumed.with(Serdes.String(),
-                requestContainerSerde));
-        Predicate<String, RequestContainer> errorOccurred = (key, request) ->
+        KStream<String, RequestPayload> taskStream = builder.stream(updateTopic, Consumed.with(Serdes.String(),
+                requestPayloadSerde));
+        Predicate<String, RequestPayload> errorOccurred = (key, request) ->
                 request.isDeserializationErrorOccurred();
-        Predicate<String, RequestContainer> uniqueURIError = (key, request) ->
+        Predicate<String, RequestPayload> uniqueURIError = (key, request) ->
                 !request.getResourceURI().contains("/tasks");
-        Predicate<String, RequestContainer> continueTaskStream = (key, request) ->
+        Predicate<String, RequestPayload> continueTaskStream = (key, request) ->
                 !request.isDeserializationErrorOccurred();
         // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
         // if predicate is true.
-        KStream<String, RequestContainer>[] executeDept = taskStream.branch(errorOccurred, uniqueURIError,
+        KStream<String, RequestPayload>[] executeDept = taskStream.branch(errorOccurred, uniqueURIError,
                 continueTaskStream);
-        KStream<String, ResponseContainer> processedValueError = executeDept[0].
+        KStream<String, ResponsePayload> processedValueError = executeDept[0].
                 mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
-        KStream<String, ResponseContainer> processedURIError = executeDept[1].
+        KStream<String, ResponsePayload> processedURIError = executeDept[1].
                     mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
-        KStream<String, ResponseContainer> processedTask = executeDept[2].mapValues(resourceHandler::processRequest);
+        KStream<String, ResponsePayload> processedTask = executeDept[2].mapValues(resourceHandler::processRequest);
         // Log errors, if any occurs
         processedValueError.foreach((k, v) -> logger.error("Value error received from {} service while attempting to" +
                         " update or acknowledge task.Status: {}. Error: {}. Error Message: {}",
@@ -140,8 +140,8 @@ public class WorkerTasksStream implements Runnable {
     @SuppressWarnings("unchecked")
     private void pollAndPublish(){
         while (activeWorkersMonitor.isActive(worker)) {
-            ResponseContainer responseContainer = batchPollTasks();
-            List<Task> batchTasks = (List<Task>) responseContainer.getResponseEntity();
+            ResponsePayload responsePayload = batchPollTasks();
+            List<Task> batchTasks = (List<Task>) responsePayload.getResponseEntity();
             if (batchTasks != null && !batchTasks.isEmpty()){
                 // Publish batch of tasks to task queue topic for worker/service
                 batchTasks.forEach(task -> publishTask(gson.toJson(task)));
@@ -155,9 +155,9 @@ public class WorkerTasksStream implements Runnable {
      *
      * @return Response from the resource contained in a response container object
      */
-    private ResponseContainer batchPollTasks(){
+    private ResponsePayload batchPollTasks(){
         String path = "/tasks/poll/batch/" + taskName + "?count=" + pollBatchSize;
-        return resourceHandler.processRequest(new RequestContainer("", path, "GET", ""));
+        return resourceHandler.processRequest(new RequestPayload("", path, "GET", ""));
     }
 
     /**

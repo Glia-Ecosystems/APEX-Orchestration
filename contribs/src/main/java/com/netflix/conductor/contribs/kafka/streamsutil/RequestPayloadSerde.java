@@ -3,7 +3,7 @@ package com.netflix.conductor.contribs.kafka.streamsutil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.contribs.kafka.model.RequestContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestPayload;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
@@ -12,17 +12,17 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Creates a Serdes object for serializing and deserializing Request Container objects in kafka streams
+ * Creates a Serdes object for serializing and deserializing Request Payload objects in kafka streams
  *
  * @author Glia Ecosystems
  */
-public class RequestContainerSerde implements Serde<RequestContainer> {
+public class RequestPayloadSerde implements Serde<RequestPayload> {
 
-    private static final Logger logger = LoggerFactory.getLogger(RequestContainerSerde.class);
+    private static final Logger logger = LoggerFactory.getLogger(RequestPayloadSerde.class);
     private final ObjectMapper objectMapper;
     private String errorMessage;
 
-    public RequestContainerSerde () {
+    public RequestPayloadSerde() {
         this.objectMapper = new ObjectMapper();
     }
 
@@ -48,61 +48,61 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
 
     /**
      * Creates the serializer for this class.
-     * @return A Request Container Serializer
+     * @return A Request Payload Serializer
      */
     @Override
-    public Serializer<RequestContainer> serializer() {
+    public Serializer<RequestPayload> serializer() {
         return null;
     }
 
     /**
      * Creates the deserializer for this class.
-     * @return A Request Container Deserializer
+     * @return A Request Payload Deserializer
      */
     @Override
-    public Deserializer<RequestContainer> deserializer() {
-        return new Deserializer<RequestContainer>() {
+    public Deserializer<RequestPayload> deserializer() {
+        return new Deserializer<RequestPayload>() {
             @Override
             public void configure(final Map<String, ?> configs, final boolean isKey) {
                 // This method is left empty until needed.
             }
 
             /**
-             * Handles the deserialization of a record received from Kafka to a RequestContainer object
+             * Handles the deserialization of a record received from Kafka Streams to a RequestPayload object
              *
              * @param topic The topic the record was consumed from
              * @param dataRecord The record received from topic
-             * @return Request Container object of the record received
+             * @return Request Payload object of the record received
              */
             @Override
-            public RequestContainer deserialize(final String topic, final byte[] dataRecord) {
+            public RequestPayload deserialize(final String topic, final byte[] dataRecord) {
                 errorMessage = "";
                 final Map<String, ?> request = jsonStringToMap(new String(dataRecord));
                 // Verify if record is null
                 if (request == null){
                     // If record sent is null
-                    errorMessage = "Conductor API request message sent via conductor is Null";
-                    RequestContainer requestContainer = new RequestContainer("", "", "", null);
-                    requestContainer.setDeserializationErrorOccurred(true);
-                    requestContainer.setDeserializationError(errorMessage);
-                    return requestContainer;
+                    errorMessage = "Conductor API request payload sent is Null";
+                    RequestPayload requestPayload = new RequestPayload("", "", "", null);
+                    requestPayload.setDeserializationErrorOccurred(true);
+                    requestPayload.setDeserializationError(errorMessage);
+                    return requestPayload;
                 }
                 // Verifies client message for Conductor
                 if (requestMessageErrors(request)) {
                     final String key = (String) request.get("key");
                     final String path = (String) request.get("path");
                     final String method = (String) request.get("method");
-                    RequestContainer requestContainer = new RequestContainer(key, path, method, request.get("request"));
-                    requestContainer.setDeserializationErrorOccurred(true);
-                    requestContainer.setDeserializationError(errorMessage);
-                    return requestContainer;
+                    RequestPayload requestPayload = new RequestPayload(key, path, method, request.get("request"));
+                    requestPayload.setDeserializationErrorOccurred(true);
+                    requestPayload.setDeserializationError(errorMessage);
+                    return requestPayload;
                 }
                 // Get the necessary info from the request message for sending to the Conductor API
                 final String key = (String) request.get("key");
                 final String path = verifyRequestedURIPath((String) request.get("path"));
                 final String method = verifyRequestedHTTPMethod((String) request.get("method"));
                 final Object entity = request.get("request");
-                return new RequestContainer(key, path, method, entity);
+                return new RequestPayload(key, path, method, entity);
             }
 
             @Override
@@ -139,16 +139,16 @@ public class RequestContainerSerde implements Serde<RequestContainer> {
      */
     private boolean requestMessageErrors(final Map<String, ?> requestMessage){
         if (requestMessage.get("key") == null || requestMessage.get("key") == "") {
-            errorMessage = "Conductor API request message sent via kafka contain missing/empty key";
-            logger.error("Conductor API request message sent via kafka contain missing/empty key");
+            errorMessage = "Conductor API request message sent, contain missing/empty key";
+            logger.error("Conductor API request message sent, contain missing/empty key");
             return true;
         } else if (requestMessage.get("path") == null || requestMessage.get("path") == "") {
-            errorMessage = "Conductor API request message sent via kafka contain missing/empty URI path";
-            logger.error("Conductor API request message sent via kafka contain missing/empty URI path");
+            errorMessage = "Conductor API request message sent, contain missing/empty URI path";
+            logger.error("Conductor API request message sent, contain missing/empty URI path");
             return true;
         }else if (requestMessage.get("method") == null || requestMessage.get("method") == "") {
-            errorMessage = "Conductor API request message sent via kafka contain missing/empty HTTP method";
-            logger.error("Conductor API request message sent via kafka contain missing/empty HTTP method");
+            errorMessage = "Conductor API request message sent, contain missing/empty HTTP method";
+            logger.error("Conductor API request message sent, contain missing/empty HTTP method");
             return true;
         }
         return false;

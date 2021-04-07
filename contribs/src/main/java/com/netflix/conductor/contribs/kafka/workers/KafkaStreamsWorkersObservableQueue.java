@@ -4,8 +4,8 @@ import com.netflix.conductor.common.utils.JsonMapperProvider;
 import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import com.netflix.conductor.contribs.kafka.model.HeartbeatCoordinator;
 import com.netflix.conductor.contribs.kafka.model.KafkaTopicsManager;
-import com.netflix.conductor.contribs.kafka.model.RequestContainer;
-import com.netflix.conductor.contribs.kafka.model.ResponseContainer;
+import com.netflix.conductor.contribs.kafka.model.RequestPayload;
+import com.netflix.conductor.contribs.kafka.model.ResponsePayload;
 import com.netflix.conductor.contribs.kafka.resource.handlers.ResourceHandler;
 import com.netflix.conductor.contribs.kafka.streamsutil.*;
 import com.netflix.conductor.core.config.Configuration;
@@ -30,8 +30,8 @@ import java.util.*;
 public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(KafkaStreamsWorkersObservableQueue.class);
     // Create custom Serde objects for processing records
-    private final RequestContainerSerde requestContainerSerde;
-    private final ResponseContainerSerde responseContainerSerde;
+    private final TaskDefRegistrationRequestPayloadSerde requestPayloadSerde;
+    private final ResponsePayloadSerde responsePayloadSerde;
     private final ResourceHandler resourceHandler;
     private final Properties streamsProperties;
     private final String registerWorkersConsumerTopic;
@@ -51,8 +51,8 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         this.resourceHandler = resourceHandler;
         this.startupTreadSleep = configuration.getLongProperty("conductor.kafka.workers.listener.startup.thread.sleep", 45000);
         this.kafkaTopicsManager = kafkaTopicsManager;
-        this.requestContainerSerde = new RequestContainerSerde();
-        this.responseContainerSerde = new ResponseContainerSerde();
+        this.requestPayloadSerde = new TaskDefRegistrationRequestPayloadSerde();
+        this.responsePayloadSerde = new ResponsePayloadSerde();
         this.registerWorkersConsumerTopic = registerWorkersConsumerTopic;
         this.registerWorkersProducerTopic = registerWorkersProducerTopic;
         this.streamsProperties = kafkaPropertiesProvider.getStreamsProperties("worker-register-" + IDGenerator.generate().substring(0, 7));
@@ -76,8 +76,8 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         StreamsBuilder builder = new StreamsBuilder();
         // Parent Node
         // Source Node (Responsible for consuming the records from a given topic, that will be processed)
-        KStream<String, RequestContainer> registerStream = builder.stream(registerWorkersConsumerTopic,
-                Consumed.with(Serdes.String(), requestContainerSerde))
+        KStream<String, RequestPayload> registerStream = builder.stream(registerWorkersConsumerTopic,
+                Consumed.with(Serdes.String(), requestPayloadSerde))
                 .peek((k, v) -> logger.info("Worker {} requesting registration to Conductor: {}", v.getKey(), v));
         // Branch Processor Node
         // Each record is matched against the given predicates in the order that they're provided.
@@ -87,31 +87,27 @@ public class KafkaStreamsWorkersObservableQueue implements ObservableQueue, Runn
         // send error to service, else process request
         // NOTE: Branch Processor Node is a list of predicates that are indexed to form the following process
         // if predicate is true.
-        Predicate<String, RequestContainer> errorOccurred = (serviceName, request) -> request.isDeserializationErrorOccurred();
+        Predicate<String, RequestPayload> errorOccurred = (serviceName, request) -> request.isDeserializationErrorOccurred();
         // If the URI sent is not an expected URI for this topic, send error to client who made initial request to topic
-        Predicate<String, RequestContainer> uniqueURIError = (serviceName, request) -> !request.getResourceURI().contains("/metadata/taskdefs");
-        Predicate<String, RequestContainer> readyToRegister = (serviceName, request) -> !request.isDeserializationErrorOccurred();
-        KStream<String, RequestContainer>[] executeDept = registerStream.branch(errorOccurred, uniqueURIError, readyToRegister);
-        KStream<String, ResponseContainer> processedValueError = executeDept[0]
+        Predicate<String, RequestPayload> readyToRegister = (serviceName, request) -> !request.isDeserializationErrorOccurred();
+        KStream<String, RequestPayload>[] executeDept = registerStream.branch(errorOccurred, readyToRegister);
+        KStream<String, ResponsePayload> processedValueError = executeDept[0]
                 .mapValues(KafkaStreamsDeserializationExceptionHandler::processValueError);
-        KStream<String, ResponseContainer> processedURIError = executeDept[1]
-                .mapValues(KafkaStreamsDeserializationExceptionHandler::processUniqueURIError);
-        KStream<String, ResponseContainer> processedRegistrationOfWorker = executeDept[2]
+        KStream<String, ResponsePayload> processedRegistrationOfWorker = executeDept[1]
                 .mapValues(resourceHandler::processRequest);
-        processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
-        processedURIError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
+        processedValueError.to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responsePayloadSerde));
         // Branch Processor Node
         // Filters the response from Conductor relating to the registration of the service task definition requested.
         // If success, start worker task stream and return kafka topics for processing tasks
         // If unsuccessful, just return response to service
-        Predicate<String, ResponseContainer> registrationSuccessful = (serviceName, response) -> response.getStatus() == 200;
-        Predicate<String, ResponseContainer> registrationUnSuccessful = (serviceName, response) -> response.getStatus() != 200;
-        KStream<String, ResponseContainer>[] successDept = processedRegistrationOfWorker.branch(registrationSuccessful,
+        Predicate<String, ResponsePayload> registrationSuccessful = (serviceName, response) -> response.getStatus() == 200;
+        Predicate<String, ResponsePayload> registrationUnSuccessful = (serviceName, response) -> response.getStatus() != 200;
+        KStream<String, ResponsePayload>[] successDept = processedRegistrationOfWorker.branch(registrationSuccessful,
                 registrationUnSuccessful);
         successDept[0].mapValues((serviceName, response) -> workersTaskStreamFactory.createWorkerTaskStream(response.getKey(), response))
-                .to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responseContainerSerde));
+                .to(registerWorkersProducerTopic, Produced.with(Serdes.String(), responsePayloadSerde));
         successDept[1].to(registerWorkersProducerTopic, Produced.with(Serdes.String(),
-                responseContainerSerde));
+                responsePayloadSerde));
         return builder.build();
     }
 
