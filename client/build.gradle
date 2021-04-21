@@ -1,4 +1,15 @@
-apply plugin: 'findbugs'
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+    dependencies {
+        classpath "gradle.plugin.com.github.spotbugs.snom:spotbugs-gradle-plugin:4.6.2"
+    }
+}
+
+apply plugin: 'com.github.spotbugs'
 apply plugin: 'pmd'
 
 configurations.all {
@@ -6,25 +17,40 @@ configurations.all {
 }
 
 dependencies {
+    implementation project(':conductor-common')
 
-    compile project(':conductor-common')
-    compile "com.sun.jersey:jersey-client:${revJerseyClient}"
-    compile "com.netflix.spectator:spectator-api:${revSpectator}"
-    compile "com.netflix.eureka:eureka-client:${revEurekaClient}"
-    compile "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${revJacksonCore}"
-    compile "com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider:${revJaxrsJackson}"
-    compile "com.netflix.archaius:archaius-core:${revArchaius}"
-    compile "com.amazonaws:aws-java-sdk-core:${revAwsSdk}"
-    compile "commons-io:commons-io:${revApacheCommons}"
+    // SBMTODO: remove guava dep
+    implementation "com.google.guava:guava:${revGuava}"
 
-    testCompile "org.slf4j:slf4j-log4j12:${revSlf4jlog4j}"
-    testCompile "org.powermock:powermock-module-junit4:${revPowerMock}"
-    testCompile "org.powermock:powermock-api-mockito2:${revPowerMock}"
+    implementation "com.sun.jersey:jersey-client:${revJersey}"
+
+    implementation "com.netflix.spectator:spectator-api:${revSpectator}"
+    implementation "com.netflix.eureka:eureka-client:${revEurekaClient}"
+    implementation "com.amazonaws:aws-java-sdk-core:${revAwsSdk}"
+
+    implementation "com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310"
+
+    implementation "org.apache.commons:commons-lang3"
+    implementation "commons-io:commons-io:${revCommonsIo}"
+
+    implementation "org.slf4j:slf4j-api"
+
+    testImplementation "org.powermock:powermock-module-junit4:${revPowerMock}"
+    testImplementation "org.powermock:powermock-api-mockito2:${revPowerMock}"
 }
 
-tasks.withType(FindBugs) {
+spotbugsMain {
     reports {
-        xml.enabled false
-        html.enabled true
+        xml {
+            enabled = false
+        }
+        html {
+            enabled = true
+        }
     }
+}
+
+pmd {
+    ignoreFailures = true
 }

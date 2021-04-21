@@ -1,27 +1,34 @@
 dependencies {
-	
-	compile project(':conductor-common')
-	compile project(':conductor-core')
+    implementation project(':conductor-common')
+    implementation project(':conductor-core')
+    compileOnly 'org.springframework.boot:spring-boot-starter'
+    compileOnly 'org.springframework.boot:spring-boot-starter-web'
 
-	compile 'com.amazonaws:aws-java-sdk-sqs:latest.release'
-	compile "com.google.inject:guice:${revGuice}"
+    implementation "com.amazonaws:aws-java-sdk-s3:${revAwsSdk}"
+    implementation "com.amazonaws:aws-java-sdk-sqs:${revAwsSdk}"
 
-	compile "net.thisptr:jackson-jq:${revJq}"
+    implementation "org.apache.commons:commons-lang3:"
 
-	compile "com.sun.jersey.contribs.jersey-oauth:oauth-client:${revOauthClient}"
-	compile "com.sun.jersey.contribs.jersey-oauth:oauth-signature:${revOauthSignature}"
+    implementation "net.thisptr:jackson-jq:${revJq}"
+    // SBMTODO: remove guava dep
+    implementation "com.google.guava:guava:${revGuava}"
 
-	compile "io.nats:java-nats-streaming:${revNatsStreaming}"
+    implementation "javax.ws.rs:jsr311-api:${revJsr311Api}"
 
-	compile "com.rabbitmq:amqp-client:${revAmqpClient}"
-	compileOnly "javax.ws.rs:jsr311-api:${revJsr311Api}"
-	compile "io.swagger:swagger-jaxrs:${revSwagger}"
+    implementation "org.apache.kafka:kafka-clients:${revKafka}"
 
-	compile "org.apache.kafka:kafka-clients:${revKafkaClient}"
-	compile "org.apache.kafka:kafka-streams:${revKafkaStreams}"
-	testCompile "org.eclipse.jetty:jetty-server:${revJetteyServer}"
-	testCompile "org.eclipse.jetty:jetty-servlet:${revJettyServlet}"
-	testCompile "org.slf4j:slf4j-log4j12:${revSlf4jlog4j}"
+    implementation "com.rabbitmq:amqp-client:${revAmqpClient}"
 
-	compile "com.netflix.spectator:spectator-reg-metrics3:${revSpectator}"
+    implementation "io.nats:java-nats-streaming:${revNatsStreaming}"
+
+    implementation "io.reactivex:rxjava:${revRxJava}"
+
+    implementation "com.netflix.spectator:spectator-reg-metrics3:${revSpectator}"
+    implementation "com.netflix.spectator:spectator-reg-micrometer:${revSpectator}"
+	implementation "io.prometheus:simpleclient:${revPrometheus}"
+	implementation "io.micrometer:micrometer-registry-prometheus:${revMicrometer}"
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation "org.testcontainers:mockserver:${revTestContainer}"
+    testImplementation "org.mock-server:mockserver-client-java:${revMockServerClient}"
 }

@@ -566,6 +566,7 @@ public abstract class AbstractProtoMapper {
         if (from.getSubWorkflowId() != null) {
             to.setSubWorkflowId( from.getSubWorkflowId() );
         }
+        to.setSubworkflowChanged( from.isSubworkflowChanged() );
         return to.build();
     }
 
@@ -624,6 +625,7 @@ public abstract class AbstractProtoMapper {
         to.setIsolationGroupId( from.getIsolationGroupId() );
         to.setIteration( from.getIteration() );
         to.setSubWorkflowId( from.getSubWorkflowId() );
+        to.setSubworkflowChanged( from.getSubworkflowChanged() );
         return to;
     }
 
@@ -947,10 +949,6 @@ public abstract class AbstractProtoMapper {
         for (Map.Entry<String, Object> pair : from.getOutput().entrySet()) {
             to.putOutput( pair.getKey(), toProto( pair.getValue() ) );
         }
-        if (from.getWorkflowType() != null) {
-            to.setWorkflowType( from.getWorkflowType() );
-        }
-        to.setVersion( from.getVersion() );
         if (from.getCorrelationId() != null) {
             to.setCorrelationId( from.getCorrelationId() );
         }
@@ -960,7 +958,6 @@ public abstract class AbstractProtoMapper {
         if (from.getReasonForIncompletion() != null) {
             to.setReasonForIncompletion( from.getReasonForIncompletion() );
         }
-        to.setSchemaVersion( from.getSchemaVersion() );
         if (from.getEvent() != null) {
             to.setEvent( from.getEvent() );
         }
@@ -1001,12 +998,9 @@ public abstract class AbstractProtoMapper {
             outputMap.put( pair.getKey(), fromProto( pair.getValue() ) );
         }
         to.setOutput(outputMap);
-        to.setWorkflowType( from.getWorkflowType() );
-        to.setVersion( from.getVersion() );
         to.setCorrelationId( from.getCorrelationId() );
         to.setReRunFromWorkflowId( from.getReRunFromWorkflowId() );
         to.setReasonForIncompletion( from.getReasonForIncompletion() );
-        to.setSchemaVersion( from.getSchemaVersion() );
         to.setEvent( from.getEvent() );
         to.setTaskToDomain( from.getTaskToDomainMap() );
         to.setFailedReferenceTaskNames( from.getFailedReferenceTaskNamesList().stream().collect(Collectors.toCollection(HashSet::new)) );

@@ -1,66 +1,38 @@
 /*
- * Copyright 2020 Netflix, Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ *  * Copyright 2021 Netflix, Inc.
+ *  * <p>
+ *  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  * the License. You may obtain a copy of the License at
+ *  * <p>
+ *  * http://www.apache.org/licenses/LICENSE-2.0
+ *  * <p>
+ *  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ *  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ *  * specific language governing permissions and limitations under the License.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 package com.netflix.conductor.test.integration
 
 import com.netflix.conductor.common.metadata.tasks.Task
 import com.netflix.conductor.common.metadata.tasks.TaskDef
 import com.netflix.conductor.common.metadata.tasks.TaskResult
+import com.netflix.conductor.common.metadata.tasks.TaskType
 import com.netflix.conductor.common.metadata.workflow.RerunWorkflowRequest
-import com.netflix.conductor.common.metadata.workflow.TaskType
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask
 import com.netflix.conductor.common.run.Workflow
 import com.netflix.conductor.core.execution.WorkflowExecutor
-import com.netflix.conductor.core.execution.WorkflowRepairService
-import com.netflix.conductor.core.execution.WorkflowSweeper
 import com.netflix.conductor.dao.QueueDAO
-import com.netflix.conductor.service.ExecutionService
-import com.netflix.conductor.service.MetadataService
-import com.netflix.conductor.test.util.WorkflowTestUtil
-import com.netflix.conductor.tests.utils.TestModule
-import com.netflix.governator.guice.test.ModulesForTesting
+import com.netflix.conductor.test.base.AbstractSpecification
+import org.springframework.beans.factory.annotation.Autowired
 import spock.lang.Shared
-import spock.lang.Specification
-
-import javax.inject.Inject
 
 import static com.netflix.conductor.test.util.WorkflowTestUtil.verifyPolledAndAcknowledgedTask
 
-@ModulesForTesting([TestModule.class])
-class WorkflowAndTaskConfigurationSpec extends Specification {
+class WorkflowAndTaskConfigurationSpec extends AbstractSpecification {
 
-    @Inject
-    ExecutionService workflowExecutionService
-
-    @Inject
-    MetadataService metadataService
-
-    @Inject
-    WorkflowExecutor workflowExecutor
-
-    @Inject
-    WorkflowSweeper workflowSweeper
-
-    @Inject
-    WorkflowRepairService workflowRepairService
-
-    @Inject
-    WorkflowTestUtil workflowTestUtil
-
-    @Inject
+    @Autowired
     QueueDAO queueDAO
 
     @Shared
@@ -82,10 +54,6 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
                 'simple_workflow_3_integration_test.json',
                 'simple_workflow_with_optional_task_integration_test.json',
                 'simple_wait_task_workflow_integration_test.json')
-    }
-
-    def cleanup() {
-        workflowTestUtil.clearWorkflows()
     }
 
     def "Test simple workflow which has an optional task"() {
@@ -165,7 +133,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
         setup: "Register a task definition with retry policy on time out"
         def persistedTask1Definition = workflowTestUtil.getPersistedTaskDefinition('integration_task_1').get()
         def modifiedTaskDefinition = new TaskDef(persistedTask1Definition.name, persistedTask1Definition.description,
-                1, 1)
+                persistedTask1Definition.ownerEmail, 1, 1, 1)
         modifiedTaskDefinition.retryDelaySeconds = 0
         modifiedTaskDefinition.timeoutPolicy = TaskDef.TimeoutPolicy.RETRY
         metadataService.updateTaskDef(modifiedTaskDefinition)
@@ -207,7 +175,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
 
         when: "There is a delay of 3 seconds introduced and the workflow is sweeped to run the evaluation"
         Thread.sleep(3000)
-        workflowSweeper.sweep([workflowInstanceId], workflowExecutor, workflowRepairService)
+        sweep(workflowInstanceId)
 
         then: "Ensure that the first task has been TIMED OUT and the next task is SCHEDULED"
         with(workflowExecutionService.getExecutionStatus(workflowInstanceId, true)) {
@@ -230,7 +198,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
 
         when: "There is a delay of 3 seconds introduced and the workflow is swept to run the evaluation"
         Thread.sleep(3000)
-        workflowSweeper.sweep([workflowInstanceId], workflowExecutor, workflowRepairService)
+        sweep(workflowInstanceId)
 
         then: "Ensure that the first task has been TIMED OUT and the next task is SCHEDULED"
         with(workflowExecutionService.getExecutionStatus(workflowInstanceId, true)) {
@@ -284,7 +252,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
 
         when: "There is a delay of 6 seconds introduced and the workflow is swept to run the evaluation"
         Thread.sleep(6000)
-        workflowSweeper.sweep([workflowInstanceId], workflowExecutor, workflowRepairService)
+        sweep(workflowInstanceId)
 
         then: "Ensure that the workflow has timed out"
         with(workflowExecutionService.getExecutionStatus(workflowInstanceId, true)) {
@@ -336,7 +304,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
 
         when: "There is a delay of 6 seconds introduced and the workflow is swept to run the evaluation"
         Thread.sleep(6000)
-        workflowSweeper.sweep([workflowInstanceId], workflowExecutor, workflowRepairService)
+        sweep(workflowInstanceId)
 
         then: "Ensure that the workflow has timed out"
         with(workflowExecutionService.getExecutionStatus(workflowInstanceId, true)) {
@@ -348,7 +316,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
         }
 
         when: "Retrying the workflow"
-        workflowExecutor.retry(workflowInstanceId,false)
+        workflowExecutor.retry(workflowInstanceId, false)
 
         then: "Ensure that the workflow is RUNNING and task is retried"
         with(workflowExecutionService.getExecutionStatus(workflowInstanceId, true)) {
@@ -846,6 +814,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
         body['outputPath'] = '${workflow.input.outputPath}'
         httpRequest['body'] = body
         templatedTask.inputTemplate['http_request'] = httpRequest
+        templatedTask.ownerEmail = "test@harness.com"
         metadataService.registerTaskDef(Arrays.asList(templatedTask))
 
         and: "set a system property for STACK2"
@@ -861,6 +830,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
         templateWorkflowDef.setName("template_workflow")
         templateWorkflowDef.getTasks().add(workflowTask)
         templateWorkflowDef.setSchemaVersion(2)
+        templateWorkflowDef.setOwnerEmail("test@harness.com")
         metadataService.registerWorkflowDef(templateWorkflowDef)
 
         and: "the input to the workflow is curated"
@@ -868,7 +838,7 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
         requestDetails['key1'] = 'value1'
         requestDetails['key2'] = 42
 
-        def input = new HashMap<>()
+        Map<String, Object> input = new HashMap<>()
         input['path1'] = 'file://path1'
         input['path2'] = 'file://path2'
         input['outputPath'] = 's3://bucket/outputPath'
@@ -896,5 +866,4 @@ class WorkflowAndTaskConfigurationSpec extends Specification {
             tasks[0].inputData.get('http_request')['uri'] == '/get/something'
         }
     }
-
 }
