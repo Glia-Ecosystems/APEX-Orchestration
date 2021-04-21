@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import com.netflix.conductor.contribs.kafka.config.KafkaPropertiesProvider;
 import org.junit.Test;
 import org.mockito.stubbing.Answer;
 
@@ -90,14 +91,16 @@ public class TestKafkaObservableQueue {
     @Test(expected = RuntimeException.class)
     public void testInitializationWithoutConfig() {
         Configuration config = mock(Configuration.class);
+        KafkaPropertiesProvider kafkaPropertiesProvider = mock(KafkaPropertiesProvider.class);
         KafkaObservableQueue queue = new KafkaObservableQueue(
-                "kafka:testTopi02", config);
+                "kafka:testTopi02", config, kafkaPropertiesProvider);
 
     }
 
     @Test(expected = RuntimeException.class)
     public void testInitializationWithoutConsumerConfig() {
         Configuration config = mock(Configuration.class);
+        KafkaPropertiesProvider kafkaPropertiesProvider = mock(KafkaPropertiesProvider.class);
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("kafka.bootstrap.servers", "locahost:9999");
         configMap.put("kafka.producer.key.serializer",
@@ -105,13 +108,15 @@ public class TestKafkaObservableQueue {
         configMap.put("kafka.producer.value.serializer",
                 "org.apache.kafka.common.serialization.StringSerializer.class");
         when(config.getAll()).thenReturn(configMap);
-        KafkaObservableQueue queue = new KafkaObservableQueue("kafka:testTopi02", config);
+        KafkaObservableQueue queue = new KafkaObservableQueue("kafka:testTopi02", config,
+                kafkaPropertiesProvider);
 
     }
 
     @Test(expected = RuntimeException.class)
     public void testInitializationWithoutProducerConfig() {
         Configuration config = mock(Configuration.class);
+        KafkaPropertiesProvider kafkaPropertiesProvider = mock(KafkaPropertiesProvider.class);
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("kafka.bootstrap.servers", "locahost:9999");
         configMap.put("kafka.consumer.key.deserializer",
@@ -119,7 +124,8 @@ public class TestKafkaObservableQueue {
         configMap.put("kafka.consumer.value.deserializer",
                 "org.apache.kafka.common.serialization.StringDeSerializer.class");
         when(config.getAll()).thenReturn(configMap);
-        KafkaObservableQueue queue = new KafkaObservableQueue("kafka:testTopi02", config);
+        KafkaObservableQueue queue = new KafkaObservableQueue("kafka:testTopi02", config,
+                kafkaPropertiesProvider);
 
     }
 
