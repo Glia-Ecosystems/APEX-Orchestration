@@ -28,6 +28,9 @@ public class Conductor {
     private static final Logger log = LoggerFactory.getLogger(Conductor.class);
 
     public static void main(String[] args) throws IOException {
+        String file = "/Users/rakimtrappjackson/IdeaProjects/APEX-Orchestration/rest/build/classes/java/main/com/netflix/conductor/rest/controllers";
+        final String jarFileUrl = file.substring(0, file.lastIndexOf('!'));
+        final String resourceParentPath = file.substring(file.lastIndexOf('!') + 2);
         loadExternalConfig();
 
         SpringApplication.run(Conductor.class, args);
