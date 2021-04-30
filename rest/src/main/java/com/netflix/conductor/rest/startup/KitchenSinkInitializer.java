@@ -15,6 +15,10 @@
  */
 package com.netflix.conductor.rest.startup;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.config.ObjectMapperProvider;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import org.slf4j.Logger;
@@ -22,7 +26,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -31,13 +37,13 @@ import org.springframework.util.FileCopyUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.servlet.DispatcherServlet;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.net.URL;
+import java.util.*;
 
 import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
@@ -48,6 +54,10 @@ public class KitchenSinkInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger(KitchenSinkInitializer.class);
 
     private final RestTemplate restTemplate;
+
+    private final ObjectMapper objectMapper;
+
+    private final ApplicationContext applicationContext;
 
     @Value("${loadSample:false}")
     private boolean loadSamples;
@@ -67,10 +77,12 @@ public class KitchenSinkInitializer {
     @Value("classpath:./kitchensink/kitchenSink-ephemeralWorkflowWithEphemeralTasks.json")
     private Resource ephemeralWorkflowWithEphemeralTasks;
 
-    public KitchenSinkInitializer(RestTemplateBuilder restTemplateBuilder) {
+    public KitchenSinkInitializer(RestTemplateBuilder restTemplateBuilder, ObjectMapper objectMapper, ApplicationContext applicationContext) {
         MappingJackson2HttpMessageConverter messageConverter = new MappingJackson2HttpMessageConverter();
         messageConverter.setObjectMapper(new ObjectMapperProvider().getObjectMapper());
         this.restTemplate = restTemplateBuilder.additionalMessageConverters(messageConverter).build();
+        this.objectMapper = objectMapper;
+        this.applicationContext = applicationContext;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -85,7 +97,24 @@ public class KitchenSinkInitializer {
         }
     }
 
+    private Object toMapObject(final String payload) {
+        final ObjectMapper mapper = new ObjectMapper();
+        Object message = null;
+        try {
+            message = mapper.readValue(payload, new TypeReference<Object>() {
+            });
+        } catch (JsonProcessingException e) {
+            LOGGER.error("Error converting deserialize json to map. {}", e.getMessage());
+        }
+        return message;
+    }
+
     private void createKitchenSink() throws Exception {
+        String task = "[{\"name\": \"append_string\", \"description\": \"Appends the input to the service to the str World\", \"ownerEmail\": \"glia@yahoo.com\", \"retryCount\": 3, \"retryLogic\": \"FIXED\", \"retryDelaySeconds\": 10, \"timeoutSeconds\": 1200, \"timeoutPolicy\": \"TIME_OUT_WF\", \"responseTimeoutSeconds\": 180, \"inputKeys\": [\"msg\"], \"outputKeys\": [\"msg\"], \"inputTemplate\": {\"msg\": \"Glia Ecosystem\"}}]";
+        Object entity = toMapObject(task);
+         restTemplate.postForEntity(url("/api/metadata/taskdefs"), entity, Object.class);
+
+
         List<TaskDef> taskDefs = new LinkedList<>();
         TaskDef taskDef;
         for (int i = 0; i < 40; i++) {
