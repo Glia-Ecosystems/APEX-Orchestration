@@ -2,7 +2,9 @@ package com.netflix.conductor.contribs.kafka.resource.builder;
 
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.MethodParameter;
 import com.netflix.conductor.contribs.kafka.resource.builder.ResourceMethod.MethodParameter.ParameterAnnotationType;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 
 import javax.ws.rs.*;
 import java.lang.annotation.Annotation;
@@ -68,17 +70,22 @@ public class ResourceBuilder {
     private static void resourceMethods(final Resource resource) {
         final Class<?> resourceClass = resource.getResourceClass();
         // Gets an array of all the public methods of the class
-        final Method[] methods = resourceClass.getMethods();
+        final Method[] methods = resourceClass.getDeclaredMethods();
+        //final Method[] methods = resourceClass.getMethods();
         for (final Method method : methods) {
-            for (final Annotation annotation : method.getAnnotations()) {
+            for (final Annotation annotation : method.getDeclaredAnnotations()) {
                 if (annotation.annotationType().getAnnotation(RequestMapping.class) != null) {
                     // Gets the class object of the return type
                     final Class<?> returnType = method.getReturnType();
                     // Gets an array of all the method annotations in declaring order
                     final Annotation[] annotations = method.getAnnotations();
                     // Gets a string representation of the HTTP annotation of the method
-                    final String[] hmet = annotation.annotationType().getAnnotation(RequestMapping.class).value();
-                    final String httpMethod = annotation.annotationType().getAnnotation(HttpMethod.class).value();
+                    final RequestMapping requestMethod = annotation.annotationType().getAnnotation(RequestMapping.class);
+                    final RequestMethod[] dg = requestMethod.method();
+                    RequestMapping re = AnnotatedElementUtils.findMergedAnnotation(method, RequestMapping.class);
+                    assert re != null;
+                    final String httpMethod = re.path()[0];
+                    //final String httpMethod = annotation.annotationType().getAnnotation(HttpMethod.class).value();
                     final ResourceMethod resourceMethod = new ResourceMethod(method, method.getAnnotation(RequestMapping.class),
                             httpMethod, annotations, returnType);
                     addMethodToResource(resource, resourceMethod, httpMethod);

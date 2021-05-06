@@ -112,7 +112,7 @@ public class KitchenSinkInitializer {
     private void createKitchenSink() throws Exception {
         String task = "[{\"name\": \"append_string\", \"description\": \"Appends the input to the service to the str World\", \"ownerEmail\": \"glia@yahoo.com\", \"retryCount\": 3, \"retryLogic\": \"FIXED\", \"retryDelaySeconds\": 10, \"timeoutSeconds\": 1200, \"timeoutPolicy\": \"TIME_OUT_WF\", \"responseTimeoutSeconds\": 180, \"inputKeys\": [\"msg\"], \"outputKeys\": [\"msg\"], \"inputTemplate\": {\"msg\": \"Glia Ecosystem\"}}]";
         Object entity = toMapObject(task);
-         restTemplate.postForEntity(url("/api/metadata/taskdefs"), entity, Object.class);
+        restTemplate.postForEntity(url("/api/metadata/taskdefs"), entity, Object.class);
 
 
         List<TaskDef> taskDefs = new LinkedList<>();

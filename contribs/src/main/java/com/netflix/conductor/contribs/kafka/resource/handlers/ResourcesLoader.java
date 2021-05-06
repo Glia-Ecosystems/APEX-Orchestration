@@ -4,14 +4,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.*;
 
 public class ResourcesLoader {
 
-    //private static final Logger logger = LoggerFactory.getLogger(ResourcesLoader.class);
+    private static final Logger logger = LoggerFactory.getLogger(ResourcesLoader.class);
     private final ApplicationContext applicationContext;
     private final Set<Class<?>> classes;
     private final String resourcesPath;
@@ -31,8 +30,9 @@ public class ResourcesLoader {
         String[] resources = applicationContext.getBeanNamesForType(Object.class);
         for (String resource: resources) {
             Class<?> bean = applicationContext.getType(resource);
+            // AnnotatedElementUtils.hasAnnotation(bean, RequestMapping.class)
             if (bean != null && bean.getPackageName().equals(resourcesPath) &&
-                    AnnotatedElementUtils.hasAnnotation(bean, RequestMapping.class)) {
+                    bean.isAnnotationPresent(RequestMapping.class)) {
                     classes.add(bean);
             }
         }
